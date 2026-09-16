@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up Akramium Home</title>
+<link rel="icon" href="/home/mark.svg">
+<link rel="stylesheet" href="/home/home.css">
+</head>
+<body class="card-page">
+<form class="card" id="form" data-token="{{token}}" data-action="/api/setup" data-next="/drive/">
+  <div class="mark"><img src="/home/mark.svg" alt=""><h1>Akramium Home<small>Your drive, docs and mail, at home</small></h1></div>
+  <p>This is a fresh install. Create the household's first account; it will be the admin that adds everyone else.</p>
+  <label for="name">Your name</label>
+  <input id="name" name="name" type="text" autocomplete="username" autofocus required>
+  <label for="password">Password (8 characters or more)</label>
+  <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8">
+  <button class="primary" type="submit">Create the admin account</button>
+  <div class="error" id="error" role="alert"></div>
+</form>
+<script src="/home/auth.js"></script>
+</body>
+</html>

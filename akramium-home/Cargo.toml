@@ -1,0 +1,30 @@
+[package]
+name = "akramium-home"
+description = "Akramium Home: one daemon for the household's drive, docs and mail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "akramium-home"
+path = "src/main.rs"
+
+[dependencies]
+home-core.workspace = true
+dekave.workspace = true
+tokio.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+ureq.workspace = true
+tempfile.workspace = true

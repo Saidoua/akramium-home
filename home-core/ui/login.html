@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in to Akramium Home</title>
+<link rel="icon" href="/home/mark.svg">
+<link rel="stylesheet" href="/home/home.css">
+</head>
+<body class="card-page">
+<form class="card" id="form" data-action="/api/login" data-next="/drive/">
+  <div class="mark"><img src="/home/mark.svg" alt=""><h1>Akramium Home<small>Sign in</small></h1></div>
+  <label for="name">Name</label>
+  <input id="name" name="name" type="text" autocomplete="username" autofocus required>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <button class="primary" type="submit">Sign in</button>
+  <div class="error" id="error" role="alert"></div>
+</form>
+<script src="/home/auth.js"></script>
+</body>
+</html>

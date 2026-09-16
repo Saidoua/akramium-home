@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeKave</title>
+<link rel="icon" href="/home/mark.svg">
+<link rel="stylesheet" href="/home/home.css">
+<link rel="stylesheet" href="/drive/app.css">
+</head>
+<body class="drive">
+<aside class="side">
+  <a class="brand" href="/drive/"><img src="/home/mark.svg" alt=""><span>DeKave</span></a>
+  <nav>
+    <a class="nav current" href="/drive/">Files</a>
+  </nav>
+  <div class="me">
+    <span id="me-name"></span>
+    <button id="signout" class="link">Sign out</button>
+  </div>
+</aside>
+<main class="main">
+  <header class="bar">
+    <nav class="crumbs" id="crumbs" aria-label="Folder path"></nav>
+    <div class="actions">
+      <button id="new-folder" class="ghost">New folder</button>
+      <button id="upload" class="primary slim">Upload</button>
+      <input id="file-input" type="file" multiple hidden>
+    </div>
+  </header>
+  <section class="uploads" id="uploads" hidden></section>
+  <section class="files" id="files" aria-live="polite"></section>
+  <div class="empty" id="empty" hidden>
+    <img src="/home/mark.svg" alt="">
+    <h2>Nothing here yet</h2>
+    <p>Drop files anywhere on this page, or use Upload.</p>
+  </div>
+  <div class="drop" id="drop" hidden><div>Drop to upload here</div></div>
+</main>
+<template id="row">
+  <a class="row" draggable="false">
+    <svg class="icon" aria-hidden="true"><use href=""></use></svg>
+    <span class="name"></span>
+    <span class="size"></span>
+    <span class="when"></span>
+  </a>
+</template>
+<script type="module" src="/drive/app.js"></script>
+</body>
+</html>

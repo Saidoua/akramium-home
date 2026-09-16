@@ -1,0 +1,46 @@
+/* Akramium Home: the browser's own colours. Green disc, pale green light, brown seed, cream centre. */
+:root {
+  --green: #3F6B4A;
+  --green-dark: #2E5237;
+  --green-light: #D8F0C2;
+  --brown: #7A5A32;
+  --cream: #FBF6EA;
+  --sand: #E4D3B2;
+  --sand-light: #F1E8D6;
+  --ink: #2B2420;
+  --ink-soft: #6B5F55;
+  --danger: #A63D2F;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(43, 36, 32, .08), 0 8px 24px rgba(43, 36, 32, .06);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--cream);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body { display: flex; flex-direction: column; min-height: 100vh; }
+a { color: var(--green); }
+button, input { font: inherit; }
+
+/* Centred card for sign in and setup */
+.card-page { flex: 1; display: grid; place-items: center; padding: 24px 16px; }
+.card { width: min(420px, 100%); background: #fff; border-radius: 20px; padding: 32px 28px; box-shadow: var(--shadow); }
+.mark { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.mark img { width: 40px; height: 40px; }
+.mark h1 { font-size: 20px; font-weight: 600; margin: 0; }
+.mark small { display: block; color: var(--ink-soft); font-size: 13px; font-weight: 400; }
+.card p { color: var(--ink-soft); margin: 0 0 20px; line-height: 1.45; }
+label { display: block; font-size: 13px; color: var(--ink-soft); margin: 14px 0 6px; }
+input[type=text], input[type=password] {
+  width: 100%; padding: 11px 12px; border: 1px solid var(--sand); border-radius: 10px; background: var(--cream);
+}
+input:focus { outline: 2px solid var(--green); outline-offset: 1px; border-color: transparent; background: #fff; }
+.primary {
+  width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 10px;
+  background: var(--green); color: #fff; font-weight: 600; cursor: pointer;
+}
+.primary:hover { background: var(--green-dark); }
+.primary:disabled { opacity: .6; cursor: default; }
+.error { color: var(--danger); font-size: 14px; min-height: 20px; margin-top: 12px; }
+
+[hidden] { display: none !important; }

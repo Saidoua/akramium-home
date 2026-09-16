@@ -1,0 +1,21 @@
+# Akramium Home configuration. Copy to home.toml and pass --config home.toml.
+
+# Loopback by default. Use 0.0.0.0:11720 to serve the whole household.
+listen = "127.0.0.1:11720"
+
+# Where the database, the files and the caches live.
+data_dir = "data"
+
+# Host names the daemon answers to, besides IP literals and localhost.
+host_names = ["akramium.local"]
+
+[modules]
+dekave = true
+doks = false
+komail = false
+
+[limits]
+# Largest JSON request body, in bytes. Uploads are not limited by this.
+body_bytes = 1048576
+# Days a sign-in stays valid.
+session_days = 30

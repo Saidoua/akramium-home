@@ -1,0 +1,39 @@
+# Akramium Home
+
+One small daemon for a household: a private drive (DeKave), documents (Doks) and mail
+(Komail), served on one port with one sign-in, used from the Akramium browser. It runs
+on the AkramiumOS PC itself or on a NAS.
+
+Status: DeKave is being built first. Doks and Komail follow.
+
+## Run it
+
+```
+cargo run -p akramium-home -- --data-dir ./data
+```
+
+The first start prints a one-time setup link (also written to `data/setup-link`). Open it,
+create the admin account, and the drive is at `http://localhost:11720/drive/`.
+
+Configuration lives in `home.toml` (see `home.example.toml`); `HOME_CONFIG`, `HOME_LISTEN`
+and `HOME_DATA_DIR` override it. During development `HOME_ASSETS_DIR=$PWD` serves the pages
+from disk so a CSS change needs no rebuild.
+
+## Layout
+
+- `home-core/`: config, accounts (Argon2id), sessions, the SQLite database, embedded pages,
+  the security headers every response carries.
+- `dekave/`: the drive. Files stay real files under `data/users/<id>/files/`; SQLite holds
+  the index. Web UI at `/drive/`, JSON at `/api/drive/`.
+- `akramium-home/`: the binary that mounts the enabled modules.
+
+## Security model
+
+The daemon is meant for a home LAN. Sessions are hashed random tokens in an `HttpOnly`
+`SameSite=Strict` cookie. Uploaded content is served with a `sandbox` content security
+policy and `nosniff`; HTML, SVG and XML always download instead of rendering. Every name
+passes one validator before it reaches the disk.
+
+## License
+
+MIT or Apache-2.0, at your option.
