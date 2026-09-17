@@ -19,6 +19,20 @@ Configuration lives in `home.toml` (see `home.example.toml`); `HOME_CONFIG`, `HO
 and `HOME_DATA_DIR` override it. During development `HOME_ASSETS_DIR=$PWD` serves the pages
 from disk so a CSS change needs no rebuild.
 
+## Mount the drive (WebDAV)
+
+The drive is also at `http://<host>:11720/dav/`, with your Akramium Home name and password.
+
+- macOS: Finder, Go, Connect to Server, then that address.
+- Linux: `dav://<host>:11720/dav/` in the file manager, or davfs2.
+- Windows: Explorer refuses name-and-password sign-in over plain `http` unless
+  `BasicAuthLevel` is set to 2 under `HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters`.
+  Turning on `[tls]` avoids that.
+
+Deleting through a mount moves the item to the drive's trash. Files desktop clients leave
+behind (`._name`, `.DS_Store`, `~$name`, `Thumbs.db`) are kept for those clients, hidden from
+the web pages, and skip the trash.
+
 ## Layout
 
 - `home-core/`: config, accounts (Argon2id), sessions, the SQLite database, embedded pages,

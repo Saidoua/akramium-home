@@ -131,7 +131,9 @@ impl Store {
     }
 
     pub async fn share_children(&self, opened: &Opened, folder: i64) -> Result<Vec<Entry>> {
-        index::children(&self.db, opened.owner, Some(folder)).await
+        let mut children = index::children(&self.db, opened.owner, Some(folder)).await?;
+        children.retain(|e| !super::is_junk(&e.name));
+        Ok(children)
     }
 
     /// Drops links that expired more than a day ago.

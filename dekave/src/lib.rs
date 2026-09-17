@@ -2,6 +2,7 @@
 //! index for ids, sizes and hashes, and a web UI served at `/drive/`.
 
 pub mod api;
+pub mod dav;
 pub mod store;
 
 use axum::Router;
@@ -61,6 +62,8 @@ pub const MIGRATIONS: &[(&str, &str)] = &[(
 pub struct Drive {
     pub core: Core,
     pub store: Store,
+    pub dav: std::sync::Arc<dav_server::DavHandler<i64>>,
+    pub dav_auth: dav::auth::BasicAuth,
 }
 
 impl axum::extract::FromRef<Drive> for Core {
@@ -73,7 +76,8 @@ pub async fn open(core: Core) -> home_core::Result<Drive> {
     core.db.migrate("dekave", MIGRATIONS).await?;
     let store = Store::new(core.db.clone(), core.config.data_dir.join("users"));
     store.spawn_purge_task(core.config.trash.keep_days);
-    Ok(Drive { core, store })
+    let dav = std::sync::Arc::new(dav::handler(store.clone()));
+    Ok(Drive { core, store, dav, dav_auth: Default::default() })
 }
 
 /// Routes under `/drive` and `/api/drive`.

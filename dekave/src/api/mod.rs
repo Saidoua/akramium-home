@@ -26,6 +26,9 @@ pub const ASSETS: &[assets::Asset] = &[
 pub fn router() -> Router<Drive> {
     Router::new()
         .route("/drive", get(|| async { Redirect::permanent("/drive/") }))
+        .route("/dav", axum::routing::any(crate::dav::serve))
+        .route("/dav/", axum::routing::any(crate::dav::serve))
+        .route("/dav/{*path}", axum::routing::any(crate::dav::serve))
         .route("/drive/", get(page))
         .route("/drive/folder/{id}", get(page))
         .route("/drive/trash", get(page))
@@ -82,7 +85,7 @@ struct FolderQuery {
 }
 
 async fn list(Signed(user): Signed, State(drive): State<Drive>, Query(q): Query<FolderQuery>) -> Result<Json<crate::store::Listing>> {
-    Ok(Json(drive.store.list(user.id, q.folder).await?))
+    Ok(Json(drive.store.list_visible(user.id, q.folder).await?))
 }
 
 #[derive(Deserialize)]

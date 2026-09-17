@@ -25,6 +25,12 @@ pub struct Store {
     busy: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
 }
 
+/// Droppings of desktop clients (AppleDouble files, Office lock files, Explorer caches).
+/// They are kept for the client that wrote them, hidden from pages, and skip the trash.
+pub fn is_junk(name: &str) -> bool {
+    name.starts_with("._") || name.starts_with("~$") || name.starts_with(".~lock.") || matches!(name, ".DS_Store" | "Thumbs.db" | "desktop.ini")
+}
+
 #[derive(Debug, Serialize)]
 pub struct Listing {
     pub folder: Option<Entry>,
@@ -120,6 +126,13 @@ impl Store {
         Ok(Listing { folder: folder_entry, crumbs, entries })
     }
 
+    /// `list` without client droppings: what pages show.
+    pub async fn list_visible(&self, user_id: i64, folder: Option<i64>) -> Result<Listing> {
+        let mut listing = self.list(user_id, folder).await?;
+        listing.entries.retain(|e| !is_junk(&e.name));
+        Ok(listing)
+    }
+
     pub(crate) async fn check_free(&self, user_id: i64, parent: Option<i64>, name: &str) -> Result<()> {
         if index::find_child(&self.db, user_id, parent, name).await?.is_some() {
             return Err(Error::Conflict(format!("there is already something called {name} here")));
@@ -188,6 +201,94 @@ impl Store {
         self.check_free(user_id, parent, &name).await?;
         tokio::fs::create_dir(parent_path.join(&name)).await?;
         index::insert(&self.db, index::NewEntry { user_id, parent_id: parent, name, is_dir: true, size: 0, hash: None, mime: None }).await
+    }
+
+    /// The live entry at a path of names from the root; `None` for the root itself.
+    pub async fn resolve(&self, user_id: i64, parts: &[String]) -> Result<Option<Entry>> {
+        let mut current: Option<Entry> = None;
+        for part in parts {
+            names::file_name(part)?;
+            if current.as_ref().is_some_and(|e| !e.is_dir) {
+                return Err(Error::NotFound);
+            }
+            let parent = current.as_ref().map(|e| e.id);
+            current = Some(index::find_child(&self.db, user_id, parent, part).await?.ok_or(Error::NotFound)?);
+        }
+        Ok(current)
+    }
+
+    /// A fresh path in the user's `tmp/`, on the same filesystem as the files.
+    pub fn tmp_path(&self, user_id: i64) -> Result<PathBuf> {
+        Ok(self.user_dir(user_id, "tmp")?.join(format!("{}-{}", now(), home_core::session::random_token())))
+    }
+
+    /// Moves finished bytes from `tmp` into a folder under `name`, creating the file or
+    /// replacing the bytes of an existing one (WebDAV PUT). A folder of that name is refused.
+    pub async fn commit_file(&self, user_id: i64, parent: Option<i64>, name: &str, tmp: &Path, size: i64, hash: String) -> Result<Entry> {
+        let name = names::file_name(name)?.to_string();
+        let folder = self.folder_path(user_id, parent).await?;
+        let existing = index::find_child(&self.db, user_id, parent, &name).await?;
+        if existing.as_ref().is_some_and(|e| e.is_dir) {
+            return Err(Error::Conflict(format!("{name} is a folder")));
+        }
+        let mime = mime_guess::from_path(&name).first_or_octet_stream().to_string();
+        tokio::fs::rename(tmp, folder.join(&name)).await?;
+        match existing {
+            Some(e) => {
+                index::set_content(&self.db, user_id, e.id, size, hash, mime).await?;
+                self.entry(user_id, e.id).await
+            }
+            None => index::insert(&self.db, index::NewEntry { user_id, parent_id: parent, name, is_dir: false, size, hash: Some(hash), mime: Some(mime) }).await,
+        }
+    }
+
+    /// A copy of a file under a new parent and name, replacing a file already there.
+    pub async fn copy_file(&self, user_id: i64, id: i64, parent: Option<i64>, name: &str) -> Result<Entry> {
+        let source = self.entry(user_id, id).await?;
+        if source.is_dir {
+            return Err(Error::BadRequest("folders are copied item by item".into()));
+        }
+        let tmp = self.tmp_path(user_id)?;
+        tokio::fs::copy(self.path_of(user_id, id).await?, &tmp).await?;
+        match self.commit_file(user_id, parent, name, &tmp, source.size, source.hash.clone().unwrap_or_default()).await {
+            Ok(e) => Ok(e),
+            Err(err) => {
+                let _ = tokio::fs::remove_file(&tmp).await;
+                Err(err)
+            }
+        }
+    }
+
+    /// New parent and new name in one step. The destination must be free.
+    pub async fn move_rename(&self, user_id: i64, id: i64, new_parent: Option<i64>, new_name: &str) -> Result<Entry> {
+        let new_name = names::file_name(new_name)?.to_string();
+        let chain = self.live_chain(user_id, id).await?;
+        let entry = chain.last().cloned().ok_or(Error::NotFound)?;
+        if entry.parent_id == new_parent && entry.name == new_name {
+            return Ok(entry);
+        }
+        let target_dir = match new_parent {
+            Some(target) => {
+                let target_chain = self.live_chain(user_id, target).await?;
+                if !target_chain.last().is_some_and(|e| e.is_dir) {
+                    return Err(Error::BadRequest("the target is not a folder".into()));
+                }
+                if target_chain.iter().any(|e| e.id == id) {
+                    return Err(Error::BadRequest("a folder cannot move into itself".into()));
+                }
+                self.path_of_chain(user_id, &target_chain)?
+            }
+            None => self.user_root(user_id)?,
+        };
+        self.check_free(user_id, new_parent, &new_name).await?;
+        let from = self.path_of_chain(user_id, &chain)?;
+        let to = target_dir.join(&new_name);
+        tokio::fs::rename(&from, &to).await?;
+        if let Err(e) = index::set_parent_and_name(&self.db, user_id, id, new_parent, new_name).await {
+            let _ = tokio::fs::rename(&to, &from).await;
+            return Err(e);
+        }
+        self.entry(user_id, id).await
     }
 
     pub async fn rename(&self, user_id: i64, id: i64, new_name: &str) -> Result<Entry> {
@@ -461,6 +562,40 @@ mod tests {
         assert!(store.list_trash(uid).await.unwrap().is_empty());
         assert!(matches!(store.path_of(uid, f.id).await, Err(Error::NotFound)), "children rows went with the folder");
         assert!(trash_dir.read_dir().unwrap().next().is_none());
+    }
+
+    #[tokio::test]
+    async fn resolve_commit_copy_move_rename() {
+        let (_dir, store, uid) = fixture().await;
+        let a = store.create_folder(uid, None, "A").await.unwrap();
+        let f = store.create_file(uid, Some(a.id), "f.txt", stream(b"one")).await.unwrap();
+        let path = |parts: &[&str]| parts.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        assert!(store.resolve(uid, &[]).await.unwrap().is_none());
+        assert_eq!(store.resolve(uid, &path(&["A", "f.txt"])).await.unwrap().unwrap().id, f.id);
+        assert!(matches!(store.resolve(uid, &path(&["A", "nope"])).await, Err(Error::NotFound)));
+        assert!(matches!(store.resolve(uid, &path(&["A", "f.txt", "x"])).await, Err(Error::NotFound)), "a file has no children");
+        assert!(matches!(store.resolve(uid, &path(&["..", "x"])).await, Err(Error::BadRequest(_))));
+
+        // Replace the bytes of an existing file: same id, new size and hash.
+        let tmp = store.tmp_path(uid).unwrap();
+        std::fs::write(&tmp, b"second version").unwrap();
+        let replaced = store.commit_file(uid, Some(a.id), "f.txt", &tmp, 14, "abc".into()).await.unwrap();
+        assert_eq!((replaced.id, replaced.size), (f.id, 14));
+        assert_eq!(std::fs::read(store.path_of(uid, f.id).await.unwrap()).unwrap(), b"second version");
+        let tmp = store.tmp_path(uid).unwrap();
+        std::fs::write(&tmp, b"x").unwrap();
+        assert!(matches!(store.commit_file(uid, None, "A", &tmp, 1, "h".into()).await, Err(Error::Conflict(_))), "never over a folder");
+
+        let copy = store.copy_file(uid, f.id, None, "copy.txt").await.unwrap();
+        assert_ne!(copy.id, f.id);
+        assert_eq!(std::fs::read(store.path_of(uid, copy.id).await.unwrap()).unwrap(), b"second version");
+
+        let moved = store.move_rename(uid, f.id, None, "moved.txt").await.unwrap();
+        assert_eq!((moved.parent_id, moved.name.as_str()), (None, "moved.txt"));
+        assert!(store.user_root(uid).unwrap().join("moved.txt").exists());
+        assert!(matches!(store.move_rename(uid, f.id, None, "copy.txt").await, Err(Error::Conflict(_))));
+        assert!(matches!(store.move_rename(uid, a.id, Some(a.id), "B").await, Err(Error::BadRequest(_))));
     }
 
     #[tokio::test]

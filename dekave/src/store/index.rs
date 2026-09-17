@@ -185,6 +185,30 @@ pub async fn set_parent(db: &Db, user_id: i64, id: i64, parent: Option<i64>) -> 
     .await
 }
 
+/// New place and name in one step (WebDAV MOVE).
+pub async fn set_parent_and_name(db: &Db, user_id: i64, id: i64, parent: Option<i64>, name: String) -> Result<()> {
+    db.call(move |c| {
+        let r = c.execute(
+            "UPDATE files SET parent_id = ?1, name = ?2, mtime = ?3 WHERE user_id = ?4 AND id = ?5",
+            params![parent, name, now(), user_id, id],
+        );
+        map_insert(r, &name)
+    })
+    .await
+}
+
+/// New bytes behind an existing file.
+pub async fn set_content(db: &Db, user_id: i64, id: i64, size: i64, hash: String, mime: String) -> Result<()> {
+    db.call(move |c| {
+        c.execute(
+            "UPDATE files SET size = ?1, hash = ?2, mime = ?3, mtime = ?4 WHERE user_id = ?5 AND id = ?6",
+            params![size, hash, mime, now(), user_id, id],
+        )?;
+        Ok(())
+    })
+    .await
+}
+
 pub async fn set_trashed(db: &Db, user_id: i64, id: i64) -> Result<()> {
     db.call(move |c| {
         c.execute(
