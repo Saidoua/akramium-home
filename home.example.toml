@@ -19,3 +19,7 @@ komail = false
 body_bytes = 1048576
 # Days a sign-in stays valid.
 session_days = 30
+
+[trash]
+# Days a deleted item waits in the trash before it is purged.
+keep_days = 30

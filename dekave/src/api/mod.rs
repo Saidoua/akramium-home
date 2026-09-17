@@ -6,7 +6,7 @@ use axum::body::Body;
 use axum::extract::{Path, Query, Request, State};
 use axum::http::{StatusCode, Uri};
 use axum::response::{IntoResponse, Redirect, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use home_core::session::{self, Signed};
 use home_core::{Result, asset, assets};
@@ -24,10 +24,17 @@ pub fn router() -> Router<Drive> {
         .route("/drive", get(|| async { Redirect::permanent("/drive/") }))
         .route("/drive/", get(page))
         .route("/drive/folder/{id}", get(page))
+        .route("/drive/trash", get(page))
         .route("/drive/{*path}", get(static_asset))
         .route("/api/drive/files", get(list).put(upload))
         .route("/api/drive/folders", post(create_folder))
+        .route("/api/drive/files/{id}", delete(trash))
         .route("/api/drive/files/{id}/content", get(content))
+        .route("/api/drive/files/{id}/rename", post(rename))
+        .route("/api/drive/files/{id}/move", post(move_to))
+        .route("/api/drive/trash", get(list_trash).delete(empty_trash))
+        .route("/api/drive/trash/{id}", delete(purge))
+        .route("/api/drive/trash/{id}/restore", post(restore))
 }
 
 /// The app shell; a signed-out visitor goes to the sign-in page and comes back here.
@@ -100,4 +107,45 @@ async fn content(Signed(user): Signed, State(drive): State<Drive>, Path(id): Pat
     let path = drive.store.path_of(user.id, id).await?;
     let mime = entry.mime.clone().unwrap_or_else(|| "application/octet-stream".into());
     Ok(blobs::serve(&path, &entry.name, &mime, q.download, request).await)
+}
+
+#[derive(Deserialize)]
+struct Rename {
+    name: String,
+}
+
+async fn rename(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>, Json(body): Json<Rename>) -> Result<Json<crate::store::Entry>> {
+    Ok(Json(drive.store.rename(user.id, id, body.name.trim()).await?))
+}
+
+#[derive(Deserialize)]
+struct Move {
+    parent: Option<i64>,
+}
+
+async fn move_to(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>, Json(body): Json<Move>) -> Result<Json<crate::store::Entry>> {
+    Ok(Json(drive.store.move_to(user.id, id, body.parent).await?))
+}
+
+async fn trash(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>) -> Result<StatusCode> {
+    drive.store.trash(user.id, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn list_trash(Signed(user): Signed, State(drive): State<Drive>) -> Result<Json<Vec<crate::store::Entry>>> {
+    Ok(Json(drive.store.list_trash(user.id).await?))
+}
+
+async fn empty_trash(Signed(user): Signed, State(drive): State<Drive>) -> Result<Json<serde_json::Value>> {
+    let n = drive.store.empty_trash(user.id).await?;
+    Ok(Json(serde_json::json!({ "purged": n })))
+}
+
+async fn purge(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>) -> Result<StatusCode> {
+    drive.store.purge(user.id, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn restore(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>) -> Result<Json<crate::store::Entry>> {
+    Ok(Json(drive.store.restore(user.id, id).await?))
 }

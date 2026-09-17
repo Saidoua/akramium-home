@@ -25,6 +25,13 @@ pub const MIGRATIONS: &[(&str, &str)] = &[(
     );
     CREATE UNIQUE INDEX files_unique_name ON files(user_id, IFNULL(parent_id, 0), name);
     CREATE INDEX files_parent ON files(user_id, parent_id);",
+), (
+    "0002-trash",
+    "ALTER TABLE files ADD COLUMN trashed_at INTEGER;
+    ALTER TABLE files ADD COLUMN orig_parent_id INTEGER;
+    DROP INDEX files_unique_name;
+    CREATE UNIQUE INDEX files_unique_name ON files(user_id, IFNULL(parent_id, 0), name) WHERE trashed_at IS NULL;
+    CREATE INDEX files_trash ON files(user_id, trashed_at) WHERE trashed_at IS NOT NULL;",
 )];
 
 /// Everything DeKave's handlers reach.
@@ -43,6 +50,7 @@ impl axum::extract::FromRef<Drive> for Core {
 pub async fn open(core: Core) -> home_core::Result<Drive> {
     core.db.migrate("dekave", MIGRATIONS).await?;
     let store = Store::new(core.db.clone(), core.config.data_dir.join("users"));
+    store.spawn_purge_task(core.config.trash.keep_days);
     Ok(Drive { core, store })
 }
 

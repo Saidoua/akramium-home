@@ -12,7 +12,8 @@
 <aside class="side">
   <a class="brand" href="/drive/"><img src="/home/mark.svg" alt=""><span>DeKave</span></a>
   <nav>
-    <a class="nav current" href="/drive/">Files</a>
+    <a class="nav" id="nav-files" href="/drive/">Files</a>
+    <a class="nav" id="nav-trash" href="/drive/trash">Trash</a>
   </nav>
   <div class="me">
     <span id="me-name"></span>
@@ -22,29 +23,67 @@
 <main class="main">
   <header class="bar">
     <nav class="crumbs" id="crumbs" aria-label="Folder path"></nav>
-    <div class="actions">
+    <div class="actions" id="files-actions">
       <button id="new-folder" class="ghost">New folder</button>
       <button id="upload" class="primary slim">Upload</button>
       <input id="file-input" type="file" multiple hidden>
+    </div>
+    <div class="actions" id="trash-actions" hidden>
+      <button id="empty-trash" class="ghost danger">Empty trash</button>
     </div>
   </header>
   <section class="uploads" id="uploads" hidden></section>
   <section class="files" id="files" aria-live="polite"></section>
   <div class="empty" id="empty" hidden>
     <img src="/home/mark.svg" alt="">
-    <h2>Nothing here yet</h2>
-    <p>Drop files anywhere on this page, or use Upload.</p>
+    <h2 id="empty-title">Nothing here yet</h2>
+    <p id="empty-text">Drop files anywhere on this page, or use Upload.</p>
   </div>
   <div class="drop" id="drop" hidden><div>Drop to upload here</div></div>
+  <div class="toast" id="toast" role="status" hidden></div>
 </main>
+
 <template id="row">
-  <a class="row" draggable="false">
+  <div class="row" tabindex="0">
     <svg class="icon" aria-hidden="true"><use href=""></use></svg>
-    <span class="name"></span>
+    <a class="name"></a>
     <span class="size"></span>
     <span class="when"></span>
-  </a>
+    <button class="more" aria-label="Actions" aria-haspopup="menu">···</button>
+  </div>
 </template>
+
+<div class="menu" id="menu" role="menu" hidden>
+  <button role="menuitem" data-action="open">Open</button>
+  <button role="menuitem" data-action="download">Download</button>
+  <button role="menuitem" data-action="rename">Rename</button>
+  <button role="menuitem" data-action="move">Move to…</button>
+  <button role="menuitem" data-action="trash" class="danger">Move to trash</button>
+  <button role="menuitem" data-action="restore">Restore</button>
+  <button role="menuitem" data-action="purge" class="danger">Delete for good</button>
+</div>
+
+<dialog id="prompt" class="dialog">
+  <form method="dialog">
+    <h3 id="prompt-title">Name</h3>
+    <input id="prompt-input" type="text" autocomplete="off" required>
+    <div class="dialog-actions">
+      <button type="button" class="ghost" value="cancel" id="prompt-cancel">Cancel</button>
+      <button type="submit" class="primary slim" value="ok">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="picker" class="dialog">
+  <h3>Move to</h3>
+  <nav class="crumbs" id="picker-crumbs"></nav>
+  <div class="picker-list" id="picker-list"></div>
+  <div class="dialog-actions">
+    <button type="button" class="ghost" id="picker-cancel">Cancel</button>
+    <button type="button" class="primary slim" id="picker-ok">Move here</button>
+  </div>
+</dialog>
+
 <script type="module" src="/drive/app.js"></script>
 </body>
 </html>

@@ -21,6 +21,26 @@ pub struct Config {
     pub modules: Modules,
     #[serde(default)]
     pub limits: Limits,
+    #[serde(default)]
+    pub trash: Trash,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Trash {
+    /// Days a trashed item stays before it is purged for good.
+    #[serde(default = "default_keep_days")]
+    pub keep_days: i64,
+}
+
+fn default_keep_days() -> i64 {
+    30
+}
+
+impl Default for Trash {
+    fn default() -> Self {
+        Self { keep_days: default_keep_days() }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
