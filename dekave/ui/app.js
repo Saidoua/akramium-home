@@ -52,6 +52,17 @@ function formatWhen(seconds) {
   return sameDay ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString();
 }
 
+const THUMB_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const TEXT_LIMIT = 512 * 1024;
+
+function previewKind(entry) {
+  if (entry.is_dir) return null;
+  const mime = entry.mime || '';
+  if (mime.startsWith('image/') && mime !== 'image/svg+xml') return 'image';
+  if (['text/plain', 'text/markdown', 'text/csv', 'application/json'].includes(mime) || mime.startsWith('text/x-')) return 'text';
+  return null;
+}
+
 function iconFor(entry) {
   if (entry.is_dir) return '#folder';
   if ((entry.mime || '').startsWith('image/')) return '#image';
@@ -101,6 +112,19 @@ function renderRows(list) {
       name.removeAttribute('href');
     }
     node.querySelector('use').setAttribute('href', `/drive/icons.svg${iconFor(entry)}`);
+    if (view === 'files' && THUMB_TYPES.includes(entry.mime) && entry.hash) {
+      const img = new Image();
+      img.loading = 'lazy';
+      img.alt = '';
+      img.src = `/api/drive/files/${entry.id}/thumb?h=${entry.hash.slice(0, 16)}`;
+      // In the page from the start (a detached lazy image never loads), shown once it has loaded.
+      img.onload = () => { img.classList.add('ready'); node.querySelector('.icon').remove(); };
+      img.onerror = () => img.remove();
+      node.querySelector('.lead').append(img);
+    }
+    if (view === 'files' && previewKind(entry)) {
+      name.addEventListener('click', (e) => { if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); openViewer(entry); } });
+    }
     node.querySelector('.size').textContent = entry.is_dir ? '' : formatSize(entry.size);
     node.querySelector('.when').textContent = view === 'trash' ? `deleted ${formatWhen(entry.trashed_at)}` : formatWhen(entry.mtime);
     node.querySelector('.more').addEventListener('click', (e) => openMenu(e, entry));
@@ -259,41 +283,133 @@ async function act(action, entry) {
   }
 }
 
-// Uploads
-function uploadOne(file) {
+// Preview overlay: images and text. Everything else opens in its own tab.
+const viewer = $('viewer');
+let viewerIndex = -1;
+const previewable = () => entries.filter(previewKind);
+
+async function openViewer(entry) {
+  const list = previewable();
+  viewerIndex = list.findIndex((e) => e.id === entry.id);
+  const stage = $('viewer-stage');
+  const url = `/api/drive/files/${entry.id}/content`;
+  $('viewer-name').textContent = entry.name;
+  $('viewer-download').href = `${url}?download=1`;
+  $('viewer-prev').disabled = viewerIndex <= 0;
+  $('viewer-next').disabled = viewerIndex >= list.length - 1;
+  stage.replaceChildren();
+  viewer.hidden = false;
+  if (previewKind(entry) === 'image') {
+    const img = new Image();
+    img.alt = entry.name;
+    img.src = url;
+    stage.append(img);
+  } else {
+    const pre = document.createElement('pre');
+    stage.append(pre);
+    try {
+      const response = await fetch(url, { headers: { range: `bytes=0-${TEXT_LIMIT - 1}` } });
+      pre.textContent = await response.text();
+      if (entry.size > TEXT_LIMIT) pre.textContent += `\n\n… showing the first ${formatSize(TEXT_LIMIT)} of ${formatSize(entry.size)}`;
+    } catch (e) {
+      stage.replaceChildren(Object.assign(document.createElement('div'), { className: 'note', textContent: 'Could not load the preview.' }));
+    }
+  }
+  $('viewer-close').focus();
+}
+function closeViewer() { viewer.hidden = true; $('viewer-stage').replaceChildren(); viewerIndex = -1; }
+function stepViewer(delta) {
+  const list = previewable();
+  const next = list[viewerIndex + delta];
+  if (next) openViewer(next);
+}
+$('viewer-close').addEventListener('click', closeViewer);
+$('viewer-prev').addEventListener('click', () => stepViewer(-1));
+$('viewer-next').addEventListener('click', () => stepViewer(1));
+viewer.addEventListener('click', (e) => { if (e.target === viewer || e.target.id === 'viewer-stage') closeViewer(); });
+document.addEventListener('keydown', (e) => {
+  if (viewer.hidden) return;
+  if (e.key === 'Escape') closeViewer();
+  if (e.key === 'ArrowLeft') stepViewer(-1);
+  if (e.key === 'ArrowRight') stepViewer(1);
+});
+
+// Uploads: chunks at known offsets, so a lost connection or a closed tab costs one chunk.
+// The upload id is remembered per file (name, size, date, folder); choosing the same file
+// again carries on where it stopped.
+const resumeKey = (file) => `dekave-upload:${folderId() ?? 0}:${file.name}:${file.size}:${file.lastModified}`;
+
+async function openUpload(file) {
+  const key = resumeKey(file);
+  const known = localStorage.getItem(key);
+  if (known) {
+    const response = await fetch(`/api/drive/uploads/${known}`);
+    if (response.ok) return response.json();
+    localStorage.removeItem(key);
+  }
+  const up = await api('/api/drive/uploads', { method: 'POST', body: { parent: folderId(), name: file.name, size: file.size } });
+  localStorage.setItem(key, up.id);
+  return up;
+}
+
+async function uploadOne(file) {
   const card = document.createElement('div');
   card.className = 'up';
-  card.innerHTML = '<span class="name"></span><span class="state"></span><div class="bar-track"><div class="bar-fill"></div></div>';
+  card.innerHTML = '<span class="name"></span><span><span class="state"></span><button class="cancel" title="Cancel">✕</button></span><div class="bar-track"><div class="bar-fill"></div></div>';
   card.querySelector('.name').textContent = file.name;
   const state = card.querySelector('.state');
   const fill = card.querySelector('.bar-fill');
   uploads.append(card);
   uploads.hidden = false;
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    const query = new URLSearchParams({ name: file.name });
-    if (folderId()) query.set('parent', folderId());
-    xhr.open('PUT', `/api/drive/files?${query}`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        fill.style.width = `${(e.loaded / e.total) * 100}%`;
-        state.textContent = `${formatSize(e.loaded)} of ${formatSize(e.total)}`;
+  let cancelled = false;
+  let upId = null;
+  card.querySelector('.cancel').onclick = () => { cancelled = true; };
+  const show = (received) => {
+    fill.style.width = `${file.size ? (received / file.size) * 100 : 100}%`;
+    state.textContent = `${formatSize(received)} of ${formatSize(file.size)}`;
+  };
+
+  try {
+    let up = await openUpload(file);
+    upId = up.id;
+    if (up.received > 0) say(`Resuming ${file.name}`);
+    show(up.received);
+    let failures = 0;
+    while (up.received < file.size) {
+      if (cancelled) throw new Error('cancelled');
+      const chunk = file.slice(up.received, up.received + up.chunk);
+      const response = await fetch(`/api/drive/uploads/${up.id}/${up.received}`, { method: 'PUT', body: chunk }).catch(() => null);
+      if (response && response.ok) {
+        up = await response.json();
+        failures = 0;
+        show(up.received);
+        continue;
       }
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        card.remove();
-      } else {
-        let message = `Failed (${xhr.status})`;
-        try { message = JSON.parse(xhr.responseText).error || message; } catch (e) { /* keep the status */ }
-        card.classList.add('failed');
-        state.textContent = message;
+      if (response && response.status !== 409 && response.status < 500) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Failed (${response.status})`);
       }
-      resolve();
-    };
-    xhr.onerror = () => { card.classList.add('failed'); state.textContent = 'Connection lost'; resolve(); };
-    xhr.send(file);
-  });
+      // Lost connection, server hiccup, or an offset mismatch: ask what arrived and go on.
+      if (++failures > 5) throw new Error('Connection lost');
+      state.textContent = 'Reconnecting…';
+      await new Promise((r) => setTimeout(r, 1000 * failures));
+      const status = await fetch(`/api/drive/uploads/${up.id}`).catch(() => null);
+      if (status && status.ok) up = await status.json();
+    }
+    await api(`/api/drive/uploads/${up.id}/finish`, { method: 'POST' });
+    localStorage.removeItem(resumeKey(file));
+    card.remove();
+  } catch (e) {
+    if (cancelled && upId) {
+      await fetch(`/api/drive/uploads/${upId}`, { method: 'DELETE' }).catch(() => {});
+      localStorage.removeItem(resumeKey(file));
+      card.remove();
+    } else {
+      card.classList.add('failed');
+      state.textContent = e.message;
+      card.querySelector('.cancel').onclick = () => card.remove();
+    }
+  }
 }
 
 async function uploadAll(list) {

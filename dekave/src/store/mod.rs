@@ -7,6 +7,8 @@
 
 pub mod blobs;
 pub mod index;
+pub mod thumbs;
+pub mod uploads;
 
 use home_core::{Db, Error, Result, names, now};
 use serde::Serialize;
@@ -18,6 +20,8 @@ pub use index::Entry;
 pub struct Store {
     db: Db,
     root: PathBuf,
+    /// Uploads with a chunk being written right now; a second writer is turned away.
+    busy: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -29,14 +33,14 @@ pub struct Listing {
 
 impl Store {
     pub fn new(db: Db, root: PathBuf) -> Self {
-        Self { db, root }
+        Self { db, root, busy: Default::default() }
     }
 
     pub fn root(&self) -> &Path {
         &self.root
     }
 
-    fn user_dir(&self, user_id: i64, sub: &str) -> Result<PathBuf> {
+    pub(crate) fn user_dir(&self, user_id: i64, sub: &str) -> Result<PathBuf> {
         let dir = self.root.join(user_id.to_string()).join(sub);
         std::fs::create_dir_all(&dir)?;
         Ok(dir)
@@ -85,7 +89,7 @@ impl Store {
     }
 
     /// A live folder's path, or the root for `None`.
-    async fn folder_path(&self, user_id: i64, folder: Option<i64>) -> Result<PathBuf> {
+    pub(crate) async fn folder_path(&self, user_id: i64, folder: Option<i64>) -> Result<PathBuf> {
         match folder {
             Some(id) => {
                 let chain = self.live_chain(user_id, id).await?;
@@ -115,7 +119,7 @@ impl Store {
         Ok(Listing { folder: folder_entry, crumbs, entries })
     }
 
-    async fn check_free(&self, user_id: i64, parent: Option<i64>, name: &str) -> Result<()> {
+    pub(crate) async fn check_free(&self, user_id: i64, parent: Option<i64>, name: &str) -> Result<()> {
         if index::find_child(&self.db, user_id, parent, name).await?.is_some() {
             return Err(Error::Conflict(format!("there is already something called {name} here")));
         }
@@ -321,6 +325,11 @@ impl Store {
                     Ok(0) => {}
                     Ok(n) => tracing::info!(n, "purged expired trash"),
                     Err(e) => tracing::warn!(error = %e, "trash purge failed"),
+                }
+                match store.uploads_expire(uploads::KEEP_SECONDS).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(n, "dropped abandoned uploads"),
+                    Err(e) => tracing::warn!(error = %e, "upload cleanup failed"),
                 }
             }
         });

@@ -30,6 +30,11 @@ pub fn router() -> Router<Drive> {
         .route("/api/drive/folders", post(create_folder))
         .route("/api/drive/files/{id}", delete(trash))
         .route("/api/drive/files/{id}/content", get(content))
+        .route("/api/drive/files/{id}/thumb", get(thumb))
+        .route("/api/drive/uploads", post(upload_begin))
+        .route("/api/drive/uploads/{id}", get(upload_status).delete(upload_cancel))
+        .route("/api/drive/uploads/{id}/finish", post(upload_finish))
+        .route("/api/drive/uploads/{id}/{offset}", axum::routing::put(upload_append))
         .route("/api/drive/files/{id}/rename", post(rename))
         .route("/api/drive/files/{id}/move", post(move_to))
         .route("/api/drive/trash", get(list_trash).delete(empty_trash))
@@ -148,4 +153,47 @@ async fn purge(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<
 
 async fn restore(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>) -> Result<Json<crate::store::Entry>> {
     Ok(Json(drive.store.restore(user.id, id).await?))
+}
+
+async fn thumb(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>, request: Request) -> Result<Response> {
+    use axum::http::{HeaderValue, header};
+    use tower::ServiceExt;
+    let path = drive.store.thumbnail(user.id, id).await?;
+    let service = tower_http::services::ServeFile::new_with_mime(&path, &mime_guess::mime::IMAGE_JPEG);
+    let mut response = match service.oneshot(request).await {
+        Ok(r) => r.into_response(),
+        Err(never) => match never {},
+    };
+    // The URL carries the content hash, so the bytes behind it never change.
+    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=31536000, immutable"));
+    Ok(response)
+}
+
+#[derive(Deserialize)]
+struct BeginUpload {
+    parent: Option<i64>,
+    name: String,
+    size: i64,
+}
+
+async fn upload_begin(Signed(user): Signed, State(drive): State<Drive>, Json(body): Json<BeginUpload>) -> Result<(StatusCode, Json<crate::store::uploads::Upload>)> {
+    let up = drive.store.upload_begin(user.id, body.parent, &body.name, body.size).await?;
+    Ok((StatusCode::CREATED, Json(up)))
+}
+
+async fn upload_status(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<String>) -> Result<Json<crate::store::uploads::Upload>> {
+    Ok(Json(drive.store.upload_status(user.id, &id).await?))
+}
+
+async fn upload_append(Signed(user): Signed, State(drive): State<Drive>, Path((id, offset)): Path<(String, i64)>, body: Body) -> Result<Json<crate::store::uploads::Upload>> {
+    Ok(Json(drive.store.upload_append(user.id, &id, offset, body.into_data_stream()).await?))
+}
+
+async fn upload_finish(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<String>) -> Result<(StatusCode, Json<crate::store::Entry>)> {
+    Ok((StatusCode::CREATED, Json(drive.store.upload_finish(user.id, &id).await?)))
+}
+
+async fn upload_cancel(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<String>) -> Result<StatusCode> {
+    drive.store.upload_cancel(user.id, &id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

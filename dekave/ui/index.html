@@ -45,7 +45,7 @@
 
 <template id="row">
   <div class="row" tabindex="0">
-    <svg class="icon" aria-hidden="true"><use href=""></use></svg>
+    <span class="lead"><svg class="icon" aria-hidden="true"><use href=""></use></svg></span>
     <a class="name"></a>
     <span class="size"></span>
     <span class="when"></span>
@@ -61,6 +61,17 @@
   <button role="menuitem" data-action="trash" class="danger">Move to trash</button>
   <button role="menuitem" data-action="restore">Restore</button>
   <button role="menuitem" data-action="purge" class="danger">Delete for good</button>
+</div>
+
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Preview">
+  <header>
+    <span class="viewer-name" id="viewer-name"></span>
+    <a class="ghost" id="viewer-download">Download</a>
+    <button class="ghost" id="viewer-close" aria-label="Close preview">Close</button>
+  </header>
+  <button class="viewer-nav prev" id="viewer-prev" aria-label="Previous">‹</button>
+  <div class="viewer-stage" id="viewer-stage"></div>
+  <button class="viewer-nav next" id="viewer-next" aria-label="Next">›</button>
 </div>
 
 <dialog id="prompt" class="dialog">

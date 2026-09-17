@@ -32,6 +32,17 @@ pub const MIGRATIONS: &[(&str, &str)] = &[(
     DROP INDEX files_unique_name;
     CREATE UNIQUE INDEX files_unique_name ON files(user_id, IFNULL(parent_id, 0), name) WHERE trashed_at IS NULL;
     CREATE INDEX files_trash ON files(user_id, trashed_at) WHERE trashed_at IS NOT NULL;",
+), (
+    "0003-uploads",
+    "CREATE TABLE uploads (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        parent_id INTEGER,
+        name TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        received INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+    );",
 )];
 
 /// Everything DeKave's handlers reach.
