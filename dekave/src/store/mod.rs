@@ -7,6 +7,7 @@
 
 pub mod blobs;
 pub mod index;
+pub mod shares;
 pub mod thumbs;
 pub mod uploads;
 
@@ -52,7 +53,7 @@ impl Store {
     }
 
     /// The chain of an entry that is live: no ancestor in the trash. `NotFound` otherwise.
-    async fn live_chain(&self, user_id: i64, id: i64) -> Result<Vec<Entry>> {
+    pub(crate) async fn live_chain(&self, user_id: i64, id: i64) -> Result<Vec<Entry>> {
         let chain = index::chain(&self.db, user_id, id).await?;
         if chain.iter().any(|e| e.trashed_at.is_some()) {
             return Err(Error::NotFound);
@@ -66,7 +67,7 @@ impl Store {
         self.path_of_chain(user_id, &chain)
     }
 
-    fn path_of_chain(&self, user_id: i64, chain: &[Entry]) -> Result<PathBuf> {
+    pub(crate) fn path_of_chain(&self, user_id: i64, chain: &[Entry]) -> Result<PathBuf> {
         let base = self.root.join(user_id.to_string());
         let mut path = self.user_root(user_id)?;
         for e in chain {
@@ -325,6 +326,9 @@ impl Store {
                     Ok(0) => {}
                     Ok(n) => tracing::info!(n, "purged expired trash"),
                     Err(e) => tracing::warn!(error = %e, "trash purge failed"),
+                }
+                if let Err(e) = store.shares_expire().await {
+                    tracing::warn!(error = %e, "share cleanup failed");
                 }
                 match store.uploads_expire(uploads::KEEP_SECONDS).await {
                     Ok(0) => {}

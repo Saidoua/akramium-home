@@ -1,5 +1,7 @@
 //! HTTP surface of the drive: pages under `/drive`, JSON under `/api/drive`.
 
+pub mod public;
+
 use crate::Drive;
 use crate::store::blobs;
 use axum::body::Body;
@@ -17,6 +19,8 @@ pub const ASSETS: &[assets::Asset] = &[
     asset!("app.css", "dekave/ui/app.css"),
     asset!("app.js", "dekave/ui/app.js"),
     asset!("icons.svg", "dekave/ui/icons.svg"),
+    asset!("share.html", "dekave/ui/share.html"),
+    asset!("share.css", "dekave/ui/share.css"),
 ];
 
 pub fn router() -> Router<Drive> {
@@ -25,6 +29,13 @@ pub fn router() -> Router<Drive> {
         .route("/drive/", get(page))
         .route("/drive/folder/{id}", get(page))
         .route("/drive/trash", get(page))
+        .route("/drive/shared", get(page))
+        .route("/s/{token}", get(public::root))
+        .route("/s/{token}/i/{id}", get(public::item))
+        .route("/s/{token}/content/{id}", get(public::content))
+        .route("/api/drive/shares", get(list_shares))
+        .route("/api/drive/shares/{id}", delete(revoke_share))
+        .route("/api/drive/files/{id}/shares", get(list_file_shares).post(create_share))
         .route("/drive/{*path}", get(static_asset))
         .route("/api/drive/files", get(list).put(upload))
         .route("/api/drive/folders", post(create_folder))
@@ -195,5 +206,29 @@ async fn upload_finish(Signed(user): Signed, State(drive): State<Drive>, Path(id
 
 async fn upload_cancel(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<String>) -> Result<StatusCode> {
     drive.store.upload_cancel(user.id, &id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct NewShare {
+    /// Seconds until the link stops working; absent or null for a link that stays.
+    expires_in: Option<i64>,
+}
+
+async fn create_share(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>, Json(body): Json<NewShare>) -> Result<(StatusCode, Json<crate::store::shares::Share>)> {
+    Ok((StatusCode::CREATED, Json(drive.store.share_create(user.id, id, body.expires_in).await?)))
+}
+
+async fn list_file_shares(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>) -> Result<Json<Vec<crate::store::shares::Share>>> {
+    drive.store.entry(user.id, id).await?;
+    Ok(Json(drive.store.share_list(user.id, Some(id)).await?))
+}
+
+async fn list_shares(Signed(user): Signed, State(drive): State<Drive>) -> Result<Json<Vec<crate::store::shares::Share>>> {
+    Ok(Json(drive.store.share_list(user.id, None).await?))
+}
+
+async fn revoke_share(Signed(user): Signed, State(drive): State<Drive>, Path(id): Path<i64>) -> Result<StatusCode> {
+    drive.store.share_revoke(user.id, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

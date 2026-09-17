@@ -16,6 +16,8 @@ pub const ASSETS: &[assets::Asset] = &[
     asset!("home.css", "home-core/ui/home.css"),
     asset!("auth.js", "home-core/ui/auth.js"),
     asset!("mark.svg", "home-core/ui/mark.svg"),
+    asset!("users.html", "home-core/ui/users.html"),
+    asset!("users.js", "home-core/ui/users.js"),
 ];
 
 pub fn router() -> Router<Core> {
@@ -23,6 +25,7 @@ pub fn router() -> Router<Core> {
         .route("/", get(root))
         .route("/setup", get(setup_page))
         .route("/login", get(login_page))
+        .route("/admin/users", get(users_page))
         .route("/api/setup", post(setup_submit))
         .route("/api/login", post(login))
         .route("/api/logout", post(logout))
@@ -77,6 +80,11 @@ async fn setup_submit(State(core): State<Core>, Json(body): Json<SetupBody>) -> 
     core.setup.finish(&core.config.data_dir);
     tracing::info!(name = %user.name, "admin created");
     signed_in(&core, user).await
+}
+
+/// The page is public markup; the data behind it needs an admin session.
+async fn users_page() -> Response {
+    assets::serve(ASSETS, "users.html")
 }
 
 async fn login_page() -> Response {

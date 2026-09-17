@@ -35,7 +35,9 @@ pub async fn security(request: Request<Body>, next: Next) -> Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
-    headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("same-origin"));
+    if !headers.contains_key(header::REFERRER_POLICY) {
+        headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("same-origin"));
+    }
     headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
     if !headers.contains_key(header::CONTENT_SECURITY_POLICY) {
         let is_html = headers

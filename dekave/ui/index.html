@@ -13,7 +13,9 @@
   <a class="brand" href="/drive/"><img src="/home/mark.svg" alt=""><span>DeKave</span></a>
   <nav>
     <a class="nav" id="nav-files" href="/drive/">Files</a>
+    <a class="nav" id="nav-shared" href="/drive/shared">Shared links</a>
     <a class="nav" id="nav-trash" href="/drive/trash">Trash</a>
+    <a class="nav" id="nav-people" href="/admin/users" hidden>People</a>
   </nav>
   <div class="me">
     <span id="me-name"></span>
@@ -56,9 +58,12 @@
 <div class="menu" id="menu" role="menu" hidden>
   <button role="menuitem" data-action="open">Open</button>
   <button role="menuitem" data-action="download">Download</button>
+  <button role="menuitem" data-action="share">Share…</button>
   <button role="menuitem" data-action="rename">Rename</button>
   <button role="menuitem" data-action="move">Move to…</button>
   <button role="menuitem" data-action="trash" class="danger">Move to trash</button>
+  <button role="menuitem" data-action="copy">Copy link</button>
+  <button role="menuitem" data-action="revoke" class="danger">Stop sharing</button>
   <button role="menuitem" data-action="restore">Restore</button>
   <button role="menuitem" data-action="purge" class="danger">Delete for good</button>
 </div>
@@ -83,6 +88,23 @@
       <button type="submit" class="primary slim" value="ok">OK</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="share" class="dialog">
+  <h3 id="share-title">Share</h3>
+  <p class="dialog-note">Anyone with the link can view and download. Nobody can change anything through it.</p>
+  <div id="share-links" class="share-links"></div>
+  <div class="share-new">
+    <label for="share-expiry">New link that works for</label>
+    <select id="share-expiry">
+      <option value="86400">1 day</option>
+      <option value="604800" selected>7 days</option>
+      <option value="2592000">30 days</option>
+      <option value="">until I stop it</option>
+    </select>
+    <button type="button" class="primary slim" id="share-create">Create link</button>
+  </div>
+  <div class="dialog-actions"><button type="button" class="ghost" id="share-close">Done</button></div>
 </dialog>
 
 <dialog id="picker" class="dialog">

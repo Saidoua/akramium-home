@@ -12,7 +12,7 @@ const toast = $('toast');
 const rowTemplate = $('row');
 const fileInput = $('file-input');
 
-const view = location.pathname.endsWith('/drive/trash') ? 'trash' : 'files';
+const view = location.pathname.endsWith('/drive/trash') ? 'trash' : location.pathname.endsWith('/drive/shared') ? 'shared' : 'files';
 const folderId = () => {
   const m = location.pathname.match(/\/drive\/folder\/(\d+)/);
   return m ? Number(m[1]) : null;
@@ -105,7 +105,10 @@ function renderRows(list) {
     node.classList.toggle('trashed', view === 'trash');
     const name = node.querySelector('.name');
     name.textContent = entry.name;
-    if (view === 'files') {
+    if (view === 'shared') {
+      name.href = `/s/${entry.token}`;
+      name.target = '_blank';
+    } else if (view === 'files') {
       name.href = entry.is_dir ? `/drive/folder/${entry.id}` : `/api/drive/files/${entry.id}/content`;
       if (!entry.is_dir) name.target = '_blank';
     } else {
@@ -125,20 +128,39 @@ function renderRows(list) {
     if (view === 'files' && previewKind(entry)) {
       name.addEventListener('click', (e) => { if (!e.metaKey && !e.ctrlKey) { e.preventDefault(); openViewer(entry); } });
     }
-    node.querySelector('.size').textContent = entry.is_dir ? '' : formatSize(entry.size);
-    node.querySelector('.when').textContent = view === 'trash' ? `deleted ${formatWhen(entry.trashed_at)}` : formatWhen(entry.mtime);
+    node.querySelector('.size').textContent = entry.is_dir || view === 'shared' ? '' : formatSize(entry.size);
+    node.querySelector('.when').textContent = view === 'trash' ? `deleted ${formatWhen(entry.trashed_at)}`
+      : view === 'shared' ? expiryText(entry.expires_at) : formatWhen(entry.mtime);
     node.querySelector('.more').addEventListener('click', (e) => openMenu(e, entry));
     node.addEventListener('contextmenu', (e) => openMenu(e, entry));
     node.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && view === 'files') name.click();
-      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); act('trash', entry); }
+      if (view === 'files' && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); act('trash', entry); }
     });
     files.append(node);
   }
   empty.hidden = list.length > 0;
 }
 
+function expiryText(expires) {
+  if (!expires) return 'no expiry';
+  const left = expires - Date.now() / 1000;
+  if (left <= 0) return 'expired';
+  if (left >= 2 * 86400) return `${Math.floor(left / 86400)} days left`;
+  if (left >= 2 * 3600) return `${Math.floor(left / 3600)} hours left`;
+  return `${Math.max(1, Math.floor(left / 60))} min left`;
+}
+
 async function load() {
+  if (view === 'shared') {
+    const shares = await api('/api/drive/shares');
+    entries = shares.map((s) => ({ ...s, share_id: s.id, id: s.file_id, size: 0, mime: '' }));
+    crumbs.replaceChildren(Object.assign(document.createElement('span'), { className: 'here', textContent: 'Shared links' }));
+    $('empty-title').textContent = 'Nothing is shared';
+    $('empty-text').textContent = 'Use Share… on a file or folder to make a link.';
+    renderRows(entries);
+    return;
+  }
   if (view === 'trash') {
     entries = await api('/api/drive/trash');
     crumbs.replaceChildren(Object.assign(document.createElement('span'), { className: 'here', textContent: 'Trash' }));
@@ -159,11 +181,11 @@ function openMenu(event, entry) {
   event.preventDefault();
   event.stopPropagation();
   menuTarget = entry;
-  const inTrash = view === 'trash';
+  const only = { trash: ['restore', 'purge'], shared: ['copy', 'revoke'] }[view];
   for (const b of menu.querySelectorAll('button')) {
     const a = b.dataset.action;
-    b.hidden = inTrash ? !['restore', 'purge'].includes(a)
-      : ['restore', 'purge'].includes(a) || (a === 'download' && entry.is_dir) || (a === 'open' && !entry.is_dir);
+    b.hidden = only ? !only.includes(a)
+      : ['restore', 'purge', 'copy', 'revoke'].includes(a) || (a === 'download' && entry.is_dir) || (a === 'open' && !entry.is_dir);
   }
   menu.hidden = false;
   const x = Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8);
@@ -246,6 +268,58 @@ function pickFolder(moving) {
   });
 }
 
+// Sharing
+const shareUrl = (token) => `${location.origin}/s/${token}`;
+
+async function copyText(text, input) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    // Plain http on the LAN is not a secure context: fall back to selecting and copying.
+    const field = input || Object.assign(document.body.appendChild(document.createElement('input')), { value: text });
+    field.select();
+    document.execCommand('copy');
+    if (!input) field.remove();
+  }
+  say('Link copied');
+}
+
+async function shareDialog(entry) {
+  const dialog = $('share');
+  const list = $('share-links');
+  $('share-title').textContent = `Share ${entry.name}`;
+
+  async function refresh() {
+    const shares = await api(`/api/drive/files/${entry.id}/shares`);
+    list.replaceChildren();
+    for (const s of shares) {
+      const item = document.createElement('div');
+      item.className = 'share-link';
+      const input = Object.assign(document.createElement('input'), { readOnly: true, value: shareUrl(s.token) });
+      input.onfocus = () => input.select();
+      const copy = Object.assign(document.createElement('button'), { type: 'button', className: 'ghost', textContent: 'Copy' });
+      copy.onclick = () => copyText(input.value, input);
+      const stop = Object.assign(document.createElement('button'), { type: 'button', className: 'ghost danger', textContent: 'Stop' });
+      stop.onclick = async () => { await api(`/api/drive/shares/${s.id}`, { method: 'DELETE' }); await refresh(); };
+      item.append(input, copy, stop, Object.assign(document.createElement('small'), { textContent: expiryText(s.expires_at) }));
+      list.append(item);
+    }
+  }
+
+  $('share-create').onclick = async () => {
+    const value = $('share-expiry').value;
+    try {
+      await api(`/api/drive/files/${entry.id}/shares`, { method: 'POST', body: { expires_in: value ? Number(value) : null } });
+      await refresh();
+    } catch (e) {
+      say(e.message);
+    }
+  };
+  $('share-close').onclick = () => dialog.close();
+  await refresh();
+  dialog.showModal();
+}
+
 async function act(action, entry) {
   try {
     switch (action) {
@@ -261,6 +335,13 @@ async function act(action, entry) {
         if (parent !== undefined) { await api(`/api/drive/files/${entry.id}/move`, { method: 'POST', body: { parent } }); await load(); say(`Moved ${entry.name}`); }
         return;
       }
+      case 'share': await shareDialog(entry); return;
+      case 'copy': await copyText(shareUrl(entry.token)); return;
+      case 'revoke':
+        await api(`/api/drive/shares/${entry.share_id}`, { method: 'DELETE' });
+        await load();
+        say('Link stopped');
+        return;
       case 'trash':
         await api(`/api/drive/files/${entry.id}`, { method: 'DELETE' });
         await load();
@@ -421,7 +502,8 @@ async function uploadAll(list) {
 // Wiring
 $('nav-files').classList.toggle('current', view === 'files');
 $('nav-trash').classList.toggle('current', view === 'trash');
-$('files-actions').hidden = view === 'trash';
+$('nav-shared').classList.toggle('current', view === 'shared');
+$('files-actions').hidden = view !== 'files';
 $('trash-actions').hidden = view !== 'trash';
 
 $('upload').addEventListener('click', () => fileInput.click());
@@ -464,5 +546,5 @@ if (view === 'files') {
   });
 }
 
-api('/api/me').then((me) => { $('me-name').textContent = me.name; });
+api('/api/me').then((me) => { $('me-name').textContent = me.name; $('nav-people').hidden = !me.is_admin; });
 load().catch((e) => { empty.hidden = false; $('empty-title').textContent = e.message; });

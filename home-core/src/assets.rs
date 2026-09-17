@@ -78,6 +78,23 @@ pub fn page(asset: &Asset, values: &[(&str, &str)]) -> Response {
     response
 }
 
+/// Like `page`, plus `[[key]]` placeholders replaced as they are: for HTML the caller built
+/// from escaped pieces. Text values go in first, so the HTML (which may quote a file called
+/// `{{title}}`) is never scanned for text placeholders.
+pub fn page_with_html(asset: &Asset, status: StatusCode, html: &[(&str, &str)], values: &[(&str, &str)]) -> Response {
+    let mut text = String::from_utf8_lossy(&bytes(asset)).into_owned();
+    for (k, v) in values {
+        text = text.replace(&format!("{{{{{k}}}}}"), &escape(v));
+    }
+    for (k, v) in html {
+        text = text.replace(&format!("[[{k}]]"), v);
+    }
+    let mut response = respond(asset);
+    *response.status_mut() = status;
+    *response.body_mut() = text.into();
+    response
+}
+
 pub fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {

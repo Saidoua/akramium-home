@@ -43,6 +43,17 @@ pub const MIGRATIONS: &[(&str, &str)] = &[(
         received INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL
     );",
+), (
+    "0004-shares",
+    "CREATE TABLE shares (
+        id INTEGER PRIMARY KEY,
+        token TEXT NOT NULL UNIQUE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER
+    );
+    CREATE INDEX shares_file ON shares(file_id);",
 )];
 
 /// Everything DeKave's handlers reach.

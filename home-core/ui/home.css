@@ -44,3 +44,31 @@ input:focus { outline: 2px solid var(--green); outline-offset: 1px; border-color
 .error { color: var(--danger); font-size: 14px; min-height: 20px; margin-top: 12px; }
 
 [hidden] { display: none !important; }
+
+/* Shared button looks, used by every module */
+.ghost { background: #fff; border: 1px solid var(--sand); color: var(--ink); padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+.ghost:hover { background: var(--cream); }
+.ghost.danger { color: var(--danger); }
+.primary.slim, .primary.slim-left { width: auto; margin: 0; padding: 8px 16px; }
+.primary.slim-left { margin-top: 16px; }
+
+/* Admin pages */
+.admin { width: min(720px, 100% - 32px); margin: 32px auto 64px; }
+.admin-top h1 { margin: 12px 0 4px; font-size: 26px; }
+.admin-top p { margin: 0 0 20px; color: var(--ink-soft); }
+.back { color: var(--ink-soft); text-decoration: none; font-size: 14px; }
+.back:hover { color: var(--green); }
+.panel { background: #fff; border-radius: 16px; box-shadow: var(--shadow); padding: 8px 20px; margin-bottom: 20px; }
+.panel.add { padding: 20px; }
+.panel h2 { margin: 0 0 4px; font-size: 17px; }
+.person { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--sand-light); }
+.person:last-child { border-bottom: 0; }
+.person.off .who strong { color: var(--ink-soft); text-decoration: line-through; }
+.who { display: flex; flex-direction: column; gap: 2px; }
+.who small { color: var(--ink-soft); font-size: 12px; min-height: 14px; }
+.person-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.person-actions .ghost { padding: 6px 10px; font-size: 13px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; margin-top: 16px; }
+.denied { color: var(--ink-soft); padding: 24px 0; text-align: center; }
+@media (max-width: 560px) { .fields { grid-template-columns: 1fr; } }

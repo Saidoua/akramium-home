@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People · Akramium Home</title>
+<link rel="icon" href="/home/mark.svg">
+<link rel="stylesheet" href="/home/home.css">
+</head>
+<body>
+<main class="admin">
+  <header class="admin-top">
+    <a class="back" href="/drive/">← Back to the drive</a>
+    <h1>People</h1>
+    <p>Everyone in the household who can sign in. Each person has a private drive.</p>
+  </header>
+  <section class="panel" id="list" aria-live="polite"></section>
+  <form class="panel add" id="add">
+    <h2>Add someone</h2>
+    <div class="fields">
+      <div><label for="name">Name</label><input id="name" type="text" autocomplete="off" required></div>
+      <div><label for="password">Password (8 or more)</label><input id="password" type="password" autocomplete="new-password" required minlength="8"></div>
+    </div>
+    <label class="check"><input id="is-admin" type="checkbox"> Can manage people (admin)</label>
+    <button class="primary slim-left" type="submit">Add</button>
+    <div class="error" id="error" role="alert"></div>
+  </form>
+</main>
+<script type="module" src="/home/users.js"></script>
+</body>
+</html>
