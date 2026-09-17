@@ -19,7 +19,9 @@ for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
   stage=$(mktemp -d)
   mkdir "$stage/$name"
   cp "target/$target/release/akramium-home" home.example.toml README.md LICENSE-MIT LICENSE-APACHE deploy/nas/akramium-home.service "$stage/$name/"
-  tar -C "$stage" -czf "dist/$name.tar.gz" "$name"
+  # No macOS attributes or local user names in the archive: Linux tar warns about the first,
+  # and the second leaks who built it.
+  COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata --uid 0 --gid 0 --uname root --gname root -C "$stage" -czf "dist/$name.tar.gz" "$name"
   echo "dist/$name.tar.gz"
 done
 (cd dist && shasum -a 256 akramium-home-"$VERSION"-linux-*.tar.gz > SHA256SUMS && cat SHA256SUMS)
