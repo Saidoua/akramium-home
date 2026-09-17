@@ -17,18 +17,9 @@ pub static APP_CSP: LazyLock<HeaderValue> = LazyLock::new(|| {
 
 /// For anything a person uploaded: no scripts, no origin. Inline styles stay allowed only
 /// because Chromium's own image and text viewers use them; HTML is never served inline.
+/// PDFs take the same policy: Chromium's PDF viewer starts under `sandbox` for a top-level
+/// PDF (checked on Akramium 0.1.8, Chromium 153, against the same file served both ways).
 pub static USER_CONTENT_CSP: LazyLock<HeaderValue> = LazyLock::new(|| HeaderValue::from_static("sandbox; default-src 'none'; style-src 'unsafe-inline'"));
-
-/// For PDFs. Chromium refuses to start its PDF viewer inside a sandboxed document, so a PDF
-/// gets no `sandbox`; it still loads nothing from anywhere, and a PDF's own scripts run inside
-/// the viewer's process without reaching the page's origin.
-pub static PDF_CSP: LazyLock<HeaderValue> =
-    LazyLock::new(|| HeaderValue::from_static("default-src 'none'; object-src 'self'; frame-src 'self'; style-src 'unsafe-inline'"));
-
-/// The policy for a piece of user content of this type.
-pub fn user_content_csp(mime: &str) -> HeaderValue {
-    if mime.split(';').next().unwrap_or("").trim() == "application/pdf" { PDF_CSP.clone() } else { USER_CONTENT_CSP.clone() }
-}
 
 /// Applied to every response.
 pub async fn security(request: Request<Body>, next: Next) -> Response {
@@ -76,8 +67,6 @@ mod tests {
         assert!(!inline_safe("text/html"));
         assert!(!inline_safe("application/xhtml+xml"));
         assert!(!inline_safe("text/xml"));
-        assert!(!user_content_csp("application/pdf").to_str().unwrap().contains("sandbox"));
-        assert!(user_content_csp("image/png").to_str().unwrap().starts_with("sandbox"));
-        assert!(user_content_csp("text/html").to_str().unwrap().starts_with("sandbox"));
+        assert!(USER_CONTENT_CSP.to_str().unwrap().starts_with("sandbox"));
     }
 }

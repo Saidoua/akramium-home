@@ -40,7 +40,7 @@ pub async fn serve(path: &Path, name: &str, mime: &str, force_download: bool, re
     let h = response.headers_mut();
     h.insert(header::CONTENT_TYPE, mime_value);
     h.insert(header::CONTENT_DISPOSITION, disposition(name, mime, force_download));
-    h.insert(header::CONTENT_SECURITY_POLICY, headers::user_content_csp(mime));
+    h.insert(header::CONTENT_SECURITY_POLICY, headers::USER_CONTENT_CSP.clone());
     h.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, no-cache"));
     response
 }
