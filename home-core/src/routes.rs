@@ -33,11 +33,28 @@ pub fn router() -> Router<Core> {
         .route("/api/users", get(list_users).post(create_user))
         .route("/api/users/{id}/disabled", post(set_disabled))
         .route("/api/users/{id}/password", post(set_password))
+        .route("/home/ca.pem", get(authority))
         .route("/home/{*path}", get(static_asset))
 }
 
 async fn root(State(core): State<Core>) -> Redirect {
     if core.setup.pending() { Redirect::to("/setup") } else { Redirect::to("/drive/") }
+}
+
+/// This install's certificate authority, for people to trust once. Public by nature.
+async fn authority(State(core): State<Core>) -> Response {
+    let path = core.config.data_dir.join("tls").join("ca.pem");
+    match (core.config.tls.enabled, std::fs::read(path)) {
+        (true, Ok(pem)) => (
+            [
+                (header::CONTENT_TYPE, "application/x-pem-file"),
+                (header::CONTENT_DISPOSITION, "attachment; filename=\"akramium-home-ca.pem\""),
+            ],
+            pem,
+        )
+            .into_response(),
+        _ => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn static_asset(axum::extract::Path(path): axum::extract::Path<String>) -> Response {
@@ -67,7 +84,7 @@ struct SetupBody {
     password: String,
 }
 
-async fn setup_submit(State(core): State<Core>, Json(body): Json<SetupBody>) -> Result<Response> {
+async fn setup_submit(State(core): State<Core>, tls: Option<axum::Extension<crate::headers::OverTls>>, Json(body): Json<SetupBody>) -> Result<Response> {
     if !core.setup.pending() {
         return Err(Error::Gone);
     }
@@ -79,7 +96,7 @@ async fn setup_submit(State(core): State<Core>, Json(body): Json<SetupBody>) -> 
     let user = accounts::create(&core.db, &body.name, &body.password, true).await?;
     core.setup.finish(&core.config.data_dir);
     tracing::info!(name = %user.name, "admin created");
-    signed_in(&core, user).await
+    signed_in(&core, user, tls.is_some()).await
 }
 
 /// The page is public markup; the data behind it needs an admin session.
@@ -97,17 +114,29 @@ struct LoginBody {
     password: String,
 }
 
-async fn login(State(core): State<Core>, Json(body): Json<LoginBody>) -> Result<Response> {
+async fn login(
+    State(core): State<Core>,
+    crate::ClientIp(address): crate::ClientIp,
+    tls: Option<axum::Extension<crate::headers::OverTls>>,
+    Json(body): Json<LoginBody>,
+) -> Result<Response> {
+    core.limit.check(address, &body.name).map_err(Error::TooMany)?;
     match accounts::authenticate(&core.db, &body.name, &body.password).await? {
-        Some(user) => signed_in(&core, user).await,
-        None => Err(Error::BadRequest("wrong name or password".into())),
+        Some(user) => {
+            core.limit.succeeded(address, &body.name);
+            signed_in(&core, user, tls.is_some()).await
+        }
+        None => {
+            core.limit.failed(address, &body.name);
+            Err(Error::BadRequest("wrong name or password".into()))
+        }
     }
 }
 
-async fn signed_in(core: &Core, user: accounts::User) -> Result<Response> {
+async fn signed_in(core: &Core, user: accounts::User, secure: bool) -> Result<Response> {
     let token = session::create(&core.db, user.id, core.config.limits.session_days).await?;
     let mut response = Json(user).into_response();
-    response.headers_mut().insert(header::SET_COOKIE, session::set_cookie(&token, core.config.limits.session_days, false));
+    response.headers_mut().insert(header::SET_COOKIE, session::set_cookie(&token, core.config.limits.session_days, secure));
     Ok(response)
 }
 

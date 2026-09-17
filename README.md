@@ -41,12 +41,29 @@ the web pages, and skip the trash.
   the index. Web UI at `/drive/`, JSON at `/api/drive/`.
 - `akramium-home/`: the binary that mounts the enabled modules.
 
+## On the network
+
+Set `listen = "0.0.0.0:11720"` and the daemon announces itself: `http://akramium.local:11720`
+opens it from any device in the house, and file managers list the drive under Network. If
+the machine is reached by another name, add that name to `host_names`.
+
+For https, set `[tls] enabled = true`. The install makes its own certificate authority
+under `data_dir/tls` and serves `https://akramium.local:11743`. Each device trusts it once:
+open `http://akramium.local:11720/home/ca.pem` and add it as a trusted authority. The
+certificate covers the configured names and the machine's addresses, and renews itself.
+
 ## Security model
 
-The daemon is meant for a home LAN. Sessions are hashed random tokens in an `HttpOnly`
-`SameSite=Strict` cookie. Uploaded content is served with a `sandbox` content security
-policy and `nosniff`; HTML, SVG and XML always download instead of rendering. Every name
-passes one validator before it reaches the disk.
+The daemon is meant for a home LAN.
+
+- Sessions are hashed random tokens in an `HttpOnly` `SameSite=Strict` cookie, `Secure` over https.
+- Requests for a host name the install does not know are refused (421), which stops DNS
+  rebinding. Writes that a browser marks as coming from another site are refused (403).
+- Five wrong passwords from one address mean a 30 second wait, doubling up to 15 minutes.
+- Uploaded content is served with a `sandbox` content security policy and `nosniff`; HTML,
+  SVG and XML always download instead of rendering.
+- Every name passes one validator before it reaches the disk.
+- `/dav` takes a name and password only; the pages' API takes the session cookie only.
 
 ## License
 

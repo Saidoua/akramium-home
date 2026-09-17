@@ -33,7 +33,8 @@ pub fn parse(header: &HeaderValue) -> Option<(String, String)> {
 }
 
 impl BasicAuth {
-    pub async fn check(&self, core: &Core, header: Option<&HeaderValue>) -> Result<Option<User>> {
+    /// `Ok(None)`: no or wrong credentials. `Err(TooMany)`: this address or name must wait.
+    pub async fn check(&self, core: &Core, header: Option<&HeaderValue>, address: Option<std::net::IpAddr>) -> Result<Option<User>> {
         let Some((name, password)) = header.and_then(parse) else {
             return Ok(None);
         };
@@ -44,7 +45,14 @@ impl BasicAuth {
             // The password is known good; the account may have been disabled since.
             return Ok(accounts::by_id(&core.db, user_id).await?.filter(|u| !u.disabled));
         }
+        // Only guesses wait. A mounted drive with a remembered good password keeps working
+        // while someone else at the same address is locked out.
+        core.limit.check(address, &name).map_err(home_core::Error::TooMany)?;
         let user = accounts::authenticate(&core.db, &name, &password).await?;
+        match &user {
+            Some(_) => core.limit.succeeded(address, &name),
+            None => core.limit.failed(address, &name),
+        }
         if let (Some(u), Ok(mut map)) = (&user, self.seen.lock()) {
             if map.len() >= MAX_REMEMBERED {
                 map.clear();
@@ -78,13 +86,13 @@ mod tests {
         let good = HeaderValue::from_static("Basic YWxpY2U6cGFzc3dvcmQx"); // alice:password1
         let bad = HeaderValue::from_static("Basic YWxpY2U6d3Jvbmc="); // alice:wrong
 
-        assert!(auth.check(&core, None).await.unwrap().is_none());
-        assert!(auth.check(&core, Some(&bad)).await.unwrap().is_none());
-        assert_eq!(auth.check(&core, Some(&good)).await.unwrap().unwrap().id, alice.id);
+        assert!(auth.check(&core, None, None).await.unwrap().is_none());
+        assert!(auth.check(&core, Some(&bad), None).await.unwrap().is_none());
+        assert_eq!(auth.check(&core, Some(&good), None).await.unwrap().unwrap().id, alice.id);
         let started = Instant::now();
-        assert!(auth.check(&core, Some(&good)).await.unwrap().is_some());
+        assert!(auth.check(&core, Some(&good), None).await.unwrap().is_some());
         assert!(started.elapsed() < Duration::from_millis(15), "the second check skips Argon2");
         accounts::set_disabled(&core.db, alice.id, true).await.unwrap();
-        assert!(auth.check(&core, Some(&good)).await.unwrap().is_none(), "a remembered password does not outlive a disable");
+        assert!(auth.check(&core, Some(&good), None).await.unwrap().is_none(), "a remembered password does not outlive a disable");
     }
 }

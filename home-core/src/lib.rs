@@ -7,12 +7,16 @@ pub mod assets;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod guard;
 pub mod headers;
 pub mod log;
+pub mod login_limit;
+pub mod mdns;
 pub mod names;
 pub mod routes;
 pub mod session;
 pub mod setup;
+pub mod tls;
 
 pub use config::Config;
 pub use db::Db;
@@ -26,6 +30,26 @@ pub struct Core {
     pub config: Arc<Config>,
     pub db: Db,
     pub setup: setup::Setup,
+    pub limit: login_limit::LoginLimit,
+}
+
+/// The address a request came from, when the server was started with connection info
+/// (always, outside tests).
+#[derive(Debug, Clone, Copy)]
+pub struct ClientIp(pub Option<std::net::IpAddr>);
+
+impl ClientIp {
+    pub fn of(extensions: &axum::http::Extensions) -> Self {
+        ClientIp(extensions.get::<axum::extract::ConnectInfo<std::net::SocketAddr>>().map(|c| c.0.ip()))
+    }
+}
+
+impl<S: Send + Sync> axum::extract::FromRequestParts<S> for ClientIp {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut axum::http::request::Parts, _state: &S) -> std::result::Result<Self, Self::Rejection> {
+        Ok(ClientIp::of(&parts.extensions))
+    }
 }
 
 impl Core {
@@ -34,7 +58,7 @@ impl Core {
         let db = Db::open(&config.data_dir.join("home.db")).await?;
         db.migrate("home-core", MIGRATIONS).await?;
         let setup = setup::Setup::prepare(&db, &config).await?;
-        Ok(Self { config: Arc::new(config), db, setup })
+        Ok(Self { config: Arc::new(config), db, setup, limit: Default::default() })
     }
 }
 

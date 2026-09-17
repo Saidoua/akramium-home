@@ -23,3 +23,15 @@ session_days = 30
 [trash]
 # Days a deleted item waits in the trash before it is purged.
 keep_days = 30
+
+[mdns]
+# Announce http://akramium.local on the LAN. Only when listening beyond loopback.
+enabled = true
+# The name before .local. Keep it in host_names above, or requests for it are refused.
+name = "akramium"
+
+[tls]
+# Also serve https. The install makes its own certificate authority under data_dir/tls;
+# people trust it once by opening /home/ca.pem. Windows Explorer needs this to mount /dav.
+enabled = false
+listen = "0.0.0.0:11743"

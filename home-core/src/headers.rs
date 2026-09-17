@@ -21,6 +21,10 @@ pub static APP_CSP: LazyLock<HeaderValue> = LazyLock::new(|| {
 /// PDF (checked on Akramium 0.1.8, Chromium 153, against the same file served both ways).
 pub static USER_CONTENT_CSP: LazyLock<HeaderValue> = LazyLock::new(|| HeaderValue::from_static("sandbox; default-src 'none'; style-src 'unsafe-inline'"));
 
+/// Marks requests that arrived over https, so the session cookie can be `Secure` there.
+#[derive(Debug, Clone, Copy)]
+pub struct OverTls;
+
 /// Applied to every response.
 pub async fn security(request: Request<Body>, next: Next) -> Response {
     let mut response = next.run(request).await;

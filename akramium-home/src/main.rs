@@ -64,7 +64,14 @@ async fn main() {
         }
     };
     tracing::info!("Akramium Home {VERSION} listening on http://{}", app.listen);
-    axum::serve(listener, app.router)
+    let _announced = home_core::mdns::announce(&app.config, app.config.modules.dekave);
+    if app.config.tls.enabled
+        && let Err(e) = serve_tls(&app).await
+    {
+        eprintln!("https: {e}");
+        std::process::exit(1);
+    }
+    axum::serve(listener, app.router.clone().into_make_service_with_connect_info::<std::net::SocketAddr>())
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
             tracing::info!("stopping");
@@ -73,7 +80,25 @@ async fn main() {
         .expect("server");
 }
 
+/// The same router over https, on its own port, with requests marked as secure.
+async fn serve_tls(app: &App) -> Result<(), String> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let files = home_core::tls::ensure(&app.config).map_err(|e| e.to_string())?;
+    let config = axum_server::tls_rustls::RustlsConfig::from_pem_file(&files.cert, &files.key).await.map_err(|e| e.to_string())?;
+    let address = app.config.tls.listen;
+    let router = app.router.clone().layer(axum::Extension(home_core::headers::OverTls));
+    tracing::info!("also listening on https://{address}; people trust it once with /home/ca.pem");
+    tokio::spawn(async move {
+        let service = router.into_make_service_with_connect_info::<std::net::SocketAddr>();
+        if let Err(e) = axum_server::bind_rustls(address, config).serve(service).await {
+            tracing::error!(error = %e, "the https listener stopped");
+        }
+    });
+    Ok(())
+}
+
 pub struct App {
+    pub config: std::sync::Arc<Config>,
     pub listen: std::net::SocketAddr,
     pub router: Router,
 }
@@ -90,10 +115,12 @@ pub async fn build(config: Config) -> home_core::Result<App> {
         router = router.merge(dekave::router(drive));
     }
     let router = router
+        .layer(axum::middleware::from_fn_with_state(core.clone(), home_core::guard::check))
         .layer(axum::middleware::from_fn(home_core::headers::security))
         // Caps JSON and form bodies; raw upload streams are not read through this limit.
         .layer(axum::extract::DefaultBodyLimit::max(body_limit))
         .layer(tower_http::trace::TraceLayer::new_for_http())
-        .with_state(core);
-    Ok(App { listen, router })
+        .with_state(core.clone());
+    let config = core.config.clone();
+    Ok(App { config, listen, router })
 }

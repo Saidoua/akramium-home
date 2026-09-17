@@ -28,7 +28,8 @@ fn challenge() -> Response {
 }
 
 pub async fn serve(State(drive): State<Drive>, request: Request) -> Response {
-    let user = match drive.dav_auth.check(&drive.core, request.headers().get(header::AUTHORIZATION)).await {
+    let address = home_core::ClientIp::of(request.extensions()).0;
+    let user = match drive.dav_auth.check(&drive.core, request.headers().get(header::AUTHORIZATION), address).await {
         Ok(Some(user)) => user,
         Ok(None) => return challenge(),
         Err(e) => return e.into_response(),

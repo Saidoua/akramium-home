@@ -23,6 +23,51 @@ pub struct Config {
     pub limits: Limits,
     #[serde(default)]
     pub trash: Trash,
+    #[serde(default)]
+    pub mdns: Mdns,
+    #[serde(default)]
+    pub tls: Tls,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tls {
+    /// Also serve https, with a certificate from this install's own authority.
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_tls_listen")]
+    pub listen: SocketAddr,
+}
+
+fn default_tls_listen() -> SocketAddr {
+    "0.0.0.0:11743".parse().unwrap()
+}
+
+impl Default for Tls {
+    fn default() -> Self {
+        Self { enabled: false, listen: default_tls_listen() }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Mdns {
+    /// Announce the daemon on the LAN (only when listening beyond loopback).
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    /// The name before `.local`. It must also be in `host_names` to be answered.
+    #[serde(default = "default_mdns_name")]
+    pub name: String,
+}
+
+fn default_mdns_name() -> String {
+    "akramium".to_string()
+}
+
+impl Default for Mdns {
+    fn default() -> Self {
+        Self { enabled: true, name: default_mdns_name() }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
