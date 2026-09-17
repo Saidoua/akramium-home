@@ -91,6 +91,16 @@ impl Store {
 
         let upload = self.upload_status(user_id, id).await?;
         if offset != upload.received {
+            // Read the refused chunk to its end (it is bounded) before answering. Answering
+            // first closes the connection under the client, which then sees a network error
+            // instead of the 409 that tells it where to resume.
+            let mut discarded: i64 = 0;
+            while let Some(chunk) = body.next().await {
+                discarded += chunk.map(|b| b.len() as i64).unwrap_or(0);
+                if discarded > MAX_CHUNK {
+                    break;
+                }
+            }
             return Err(Error::Conflict(format!("expected offset {}, got {offset}", upload.received)));
         }
         {

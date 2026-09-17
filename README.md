@@ -33,6 +33,18 @@ Deleting through a mount moves the item to the drive's trash. Files desktop clie
 behind (`._name`, `.DS_Store`, `~$name`, `Thumbs.db`) are kept for those clients, hidden from
 the web pages, and skip the trash.
 
+## Checks
+
+```
+cargo test --workspace                                   # unit tests, and the daemon over real HTTP
+cargo build --release
+./check-home.sh target/release/akramium-home 0.1.0       # before a release: one ok/FAIL line per behaviour
+./check-home-selftest.sh                                 # the checks themselves: all must FAIL on a fake daemon
+```
+
+A fixed bug gets a line in `check-home.sh`. The self-test runs that script against a daemon
+that answers yes to everything; a line that passes there would pass on a broken build too.
+
 ## Layout
 
 - `home-core/`: config, accounts (Argon2id), sessions, the SQLite database, embedded pages,

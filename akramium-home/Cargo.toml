@@ -10,6 +10,10 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[lib]
+name = "akramium_home"
+path = "src/lib.rs"
+
 [[bin]]
 name = "akramium-home"
 path = "src/main.rs"
@@ -28,5 +32,6 @@ axum-server = { version = "0.8.0", default-features = false, features = ["tls-ru
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 
 [dev-dependencies]
-ureq.workspace = true
 tempfile.workspace = true
+http.workspace = true
+serde_json.workspace = true
