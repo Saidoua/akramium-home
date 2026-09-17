@@ -504,8 +504,11 @@ mod tests {
         let f = store.create_file(uid, Some(b.id), "f.txt", stream(b"x")).await.unwrap();
         let root = store.user_root(uid).unwrap();
 
+        let f2 = store.rename(uid, f.id, "g.pdf").await.unwrap();
+        assert_eq!(f2.mime.as_deref(), Some("application/pdf"), "the type follows the name");
         let f2 = store.rename(uid, f.id, "g.txt").await.unwrap();
         assert_eq!(f2.name, "g.txt");
+        assert_eq!(f2.mime.as_deref(), Some("text/plain"));
         assert!(root.join("A/B/g.txt").exists());
         assert!(!root.join("A/B/f.txt").exists());
 
@@ -593,6 +596,8 @@ mod tests {
 
         let moved = store.move_rename(uid, f.id, None, "moved.txt").await.unwrap();
         assert_eq!((moved.parent_id, moved.name.as_str()), (None, "moved.txt"));
+        assert_eq!(moved.mime.as_deref(), Some("text/plain"));
+        assert_eq!(store.rename(uid, a.id, "A2").await.unwrap().mime, None, "folders have no type");
         assert!(store.user_root(uid).unwrap().join("moved.txt").exists());
         assert!(matches!(store.move_rename(uid, f.id, None, "copy.txt").await, Err(Error::Conflict(_))));
         assert!(matches!(store.move_rename(uid, a.id, Some(a.id), "B").await, Err(Error::BadRequest(_))));

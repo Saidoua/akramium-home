@@ -168,9 +168,17 @@ pub async fn insert(db: &Db, e: NewEntry) -> Result<Entry> {
     .await
 }
 
+/// A file's type follows its name, so a rename to `.pdf` makes it a PDF.
+fn mime_for(name: &str) -> String {
+    mime_guess::from_path(name).first_or_octet_stream().to_string()
+}
+
 pub async fn rename(db: &Db, user_id: i64, id: i64, name: String) -> Result<()> {
     db.call(move |c| {
-        let r = c.execute("UPDATE files SET name = ?1, mtime = ?2 WHERE user_id = ?3 AND id = ?4", params![name, now(), user_id, id]);
+        let r = c.execute(
+            "UPDATE files SET name = ?1, mtime = ?2, mime = CASE WHEN is_dir = 1 THEN NULL ELSE ?3 END WHERE user_id = ?4 AND id = ?5",
+            params![name, now(), mime_for(&name), user_id, id],
+        );
         map_insert(r, &name)
     })
     .await
@@ -189,8 +197,8 @@ pub async fn set_parent(db: &Db, user_id: i64, id: i64, parent: Option<i64>) -> 
 pub async fn set_parent_and_name(db: &Db, user_id: i64, id: i64, parent: Option<i64>, name: String) -> Result<()> {
     db.call(move |c| {
         let r = c.execute(
-            "UPDATE files SET parent_id = ?1, name = ?2, mtime = ?3 WHERE user_id = ?4 AND id = ?5",
-            params![parent, name, now(), user_id, id],
+            "UPDATE files SET parent_id = ?1, name = ?2, mtime = ?3, mime = CASE WHEN is_dir = 1 THEN NULL ELSE ?4 END WHERE user_id = ?5 AND id = ?6",
+            params![parent, name, now(), mime_for(&name), user_id, id],
         );
         map_insert(r, &name)
     })

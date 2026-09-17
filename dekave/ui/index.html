@@ -3,29 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FBF6EA">
 <title>DeKave</title>
 <link rel="icon" href="/home/mark.svg">
 <link rel="stylesheet" href="/home/home.css">
 <link rel="stylesheet" href="/drive/app.css">
 </head>
 <body class="drive">
+<a class="skip" href="#files">Skip to the files</a>
 <aside class="side">
   <a class="brand" href="/drive/"><img src="/home/mark.svg" alt=""><span>DeKave</span></a>
-  <nav>
-    <a class="nav" id="nav-files" href="/drive/">Files</a>
-    <a class="nav" id="nav-shared" href="/drive/shared">Shared links</a>
-    <a class="nav" id="nav-trash" href="/drive/trash">Trash</a>
-    <a class="nav" id="nav-people" href="/admin/users" hidden>People</a>
+  <nav aria-label="Drive">
+    <a class="nav" id="nav-files" href="/drive/"><svg class="icon" aria-hidden="true"><use href="/drive/icons.svg#folder"></use></svg>Files</a>
+    <a class="nav" id="nav-shared" href="/drive/shared"><svg class="icon" aria-hidden="true"><use href="/drive/icons.svg#link"></use></svg>Shared links</a>
+    <a class="nav" id="nav-trash" href="/drive/trash"><svg class="icon" aria-hidden="true"><use href="/drive/icons.svg#trash"></use></svg>Trash</a>
+    <a class="nav" id="nav-people" href="/admin/users" hidden><svg class="icon" aria-hidden="true"><use href="/drive/icons.svg#people"></use></svg>People</a>
   </nav>
   <div class="me">
     <span id="me-name"></span>
     <button id="signout" class="link">Sign out</button>
   </div>
 </aside>
-<main class="main">
+
+<main class="main" id="main">
   <header class="bar">
     <nav class="crumbs" id="crumbs" aria-label="Folder path"></nav>
-    <div class="actions" id="files-actions">
+    <div class="actions" id="files-actions" hidden>
+      <button id="details-toggle" class="ghost square" aria-label="Show or hide details" title="Details"><svg class="icon" aria-hidden="true"><use href="/drive/icons.svg#info"></use></svg></button>
       <button id="new-folder" class="ghost">New folder</button>
       <button id="upload" class="primary slim">Upload</button>
       <input id="file-input" type="file" multiple hidden>
@@ -33,9 +37,28 @@
     <div class="actions" id="trash-actions" hidden>
       <button id="empty-trash" class="ghost danger">Empty trash</button>
     </div>
+    <div class="actions selection" id="selection" hidden>
+      <span id="selection-count" aria-live="polite"></span>
+      <button class="ghost" data-action="download">Download</button>
+      <button class="ghost" data-action="share">Share…</button>
+      <button class="ghost" data-action="rename">Rename</button>
+      <button class="ghost" data-action="move">Move…</button>
+      <button class="ghost danger" data-action="trash">Delete</button>
+      <button class="ghost" data-action="restore">Restore</button>
+      <button class="ghost danger" data-action="purge">Delete for good</button>
+      <button class="ghost square" data-action="clear" aria-label="Clear the selection" title="Clear (Esc)">✕</button>
+    </div>
   </header>
-  <section class="uploads" id="uploads" hidden></section>
-  <section class="files" id="files" aria-live="polite"></section>
+  <section class="uploads" id="uploads" hidden aria-label="Uploads"></section>
+  <div class="head" id="head" hidden>
+    <span class="check" id="select-all" role="checkbox" aria-checked="false" aria-label="Select everything" tabindex="0"></span>
+    <span></span>
+    <button data-sort="name">Name <span class="arrow"></span></button>
+    <button data-sort="size" class="right">Size <span class="arrow"></span></button>
+    <button data-sort="when" class="right"><span id="when-label">Changed</span> <span class="arrow"></span></button>
+    <span></span>
+  </div>
+  <section class="files" id="files" role="listbox" aria-multiselectable="true" aria-label="Files"></section>
   <div class="empty" id="empty" hidden>
     <img src="/home/mark.svg" alt="">
     <h2 id="empty-title">Nothing here yet</h2>
@@ -45,23 +68,15 @@
   <div class="toast" id="toast" role="status" hidden></div>
 </main>
 
-<template id="row">
-  <div class="row" tabindex="0">
-    <span class="lead"><svg class="icon" aria-hidden="true"><use href=""></use></svg></span>
-    <a class="name"></a>
-    <span class="size"></span>
-    <span class="when"></span>
-    <button class="more" aria-label="Actions" aria-haspopup="menu">···</button>
-  </div>
-</template>
+<aside class="details" id="details" aria-label="Details"></aside>
 
 <div class="menu" id="menu" role="menu" hidden>
   <button role="menuitem" data-action="open">Open</button>
   <button role="menuitem" data-action="download">Download</button>
   <button role="menuitem" data-action="share">Share…</button>
   <button role="menuitem" data-action="rename">Rename</button>
-  <button role="menuitem" data-action="move">Move to…</button>
-  <button role="menuitem" data-action="trash" class="danger">Move to trash</button>
+  <button role="menuitem" data-action="move">Move…</button>
+  <button role="menuitem" data-action="trash" class="danger">Delete</button>
   <button role="menuitem" data-action="copy">Copy link</button>
   <button role="menuitem" data-action="revoke" class="danger">Stop sharing</button>
   <button role="menuitem" data-action="restore">Restore</button>
@@ -71,6 +86,7 @@
 <div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Preview">
   <header>
     <span class="viewer-name" id="viewer-name"></span>
+    <span class="viewer-count" id="viewer-count"></span>
     <a class="ghost" id="viewer-download">Download</a>
     <button class="ghost" id="viewer-close" aria-label="Close preview">Close</button>
   </header>
@@ -82,12 +98,21 @@
 <dialog id="prompt" class="dialog">
   <form method="dialog">
     <h3 id="prompt-title">Name</h3>
-    <input id="prompt-input" type="text" autocomplete="off" required>
+    <input id="prompt-input" type="text" autocomplete="off" required maxlength="255">
     <div class="dialog-actions">
-      <button type="button" class="ghost" value="cancel" id="prompt-cancel">Cancel</button>
-      <button type="submit" class="primary slim" value="ok">OK</button>
+      <button type="button" class="ghost" id="prompt-cancel">Cancel</button>
+      <button type="submit" class="primary slim" value="ok" id="prompt-ok">OK</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="confirm" class="dialog">
+  <h3 id="confirm-title"></h3>
+  <p class="dialog-note" id="confirm-text"></p>
+  <div class="dialog-actions">
+    <button type="button" class="ghost" id="confirm-cancel">Cancel</button>
+    <button type="button" class="primary slim danger-fill" id="confirm-ok"></button>
+  </div>
 </dialog>
 
 <dialog id="share" class="dialog">
@@ -108,7 +133,7 @@
 </dialog>
 
 <dialog id="picker" class="dialog">
-  <h3>Move to</h3>
+  <h3 id="picker-title">Move to</h3>
   <nav class="crumbs" id="picker-crumbs"></nav>
   <div class="picker-list" id="picker-list"></div>
   <div class="dialog-actions">
