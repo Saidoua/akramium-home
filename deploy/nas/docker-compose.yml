@@ -1,0 +1,22 @@
+# Akramium Home on a NAS. From the repository root:
+#
+#   docker compose -f deploy/nas/docker-compose.yml up -d --build
+#   docker compose -f deploy/nas/docker-compose.yml logs      # the first start prints the setup link
+#
+# Host networking lets the daemon announce http://akramium.local:11720 on the LAN. It needs
+# Linux (every NAS). On Docker Desktop for Mac or Windows, remove `network_mode`, add
+# `ports: ["11720:11720"]`, and open the machine's address instead of the .local name.
+services:
+  akramium-home:
+    build:
+      context: ../..
+      dockerfile: deploy/nas/Dockerfile
+    image: akramium-home
+    restart: unless-stopped
+    network_mode: host
+    # The files belong to this user. Match it to the owner of ./data on the host.
+    user: "1000:1000"
+    volumes:
+      - ./data:/var/lib/akramium-home
+      # - ./home.toml:/etc/akramium-home/home.toml:ro
+    stop_grace_period: 10s

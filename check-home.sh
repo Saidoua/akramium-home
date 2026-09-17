@@ -120,8 +120,10 @@ if command -v dns-sd > /dev/null; then
   grep -qE "$NAME\.local\.[[:space:]]+[0-9]+\.[0-9]+\." "$T/mdns"; check "the daemon's name resolves on the network (mDNS)" $?
 elif command -v avahi-resolve > /dev/null; then
   avahi-resolve -4 -n "$NAME.local" 2>/dev/null | grep -qE '[0-9]+\.[0-9]+\.'; check "the daemon's name resolves on the network (mDNS)" $?
+elif getent hosts localhost > /dev/null 2>&1 && grep -qE '^hosts:.*mdns' /etc/nsswitch.conf 2>/dev/null; then
+  sleep 2; getent hosts "$NAME.local" | grep -qE '^[0-9a-f]'; check "the daemon's name resolves on the network (mDNS)" $?
 else
-  skip "the daemon's name resolves on the network (mDNS)" "no dns-sd or avahi-resolve here"
+  skip "the daemon's name resolves on the network (mDNS)" "no dns-sd, avahi-resolve or mdns in nsswitch here"
 fi
 
 # Idle: nothing but our own listener and mDNS. Any TCP connection the daemon opened to
@@ -137,7 +139,9 @@ else
 fi
 
 # --- dependencies -----------------------------------------------------------------------------------------------
-if cargo audit --version > /dev/null 2>&1; then
+if [ ! -f "$(dirname "$0")/Cargo.lock" ]; then
+  skip "cargo audit finds no known vulnerability" "no Cargo.lock beside this script: run it from the source tree"
+elif cargo audit --version > /dev/null 2>&1; then
   (cd "$(dirname "$0")" && cargo audit -q > "$T/audit" 2>&1); check "cargo audit finds no known vulnerability" $? "$(grep -c '^ID:' "$T/audit") advisories"
 else
   skip "cargo audit finds no known vulnerability" "cargo-audit is not installed: cargo install cargo-audit"

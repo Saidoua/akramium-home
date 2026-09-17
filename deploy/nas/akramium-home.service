@@ -1,0 +1,40 @@
+# Akramium Home as a systemd service, for a Linux box without Docker.
+#
+#   sudo useradd --system --home /var/lib/akramium-home --shell /usr/sbin/nologin akramium-home
+#   sudo install -m 0755 akramium-home /usr/local/bin/
+#   sudo install -D -m 0644 home.example.toml /etc/akramium-home/home.toml   # then set listen and data_dir
+#   sudo install -m 0644 akramium-home.service /etc/systemd/system/
+#   sudo systemctl enable --now akramium-home
+#   journalctl -u akramium-home        # the first start prints the setup link
+[Unit]
+Description=Akramium Home (drive, docs and mail for the household)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=akramium-home
+Group=akramium-home
+StateDirectory=akramium-home
+Environment=HOME_DATA_DIR=/var/lib/akramium-home
+ExecStart=/usr/local/bin/akramium-home --config /etc/akramium-home/home.toml
+Restart=on-failure
+RestartSec=5
+
+# The daemon needs its data directory and the network, nothing else.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

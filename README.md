@@ -53,6 +53,23 @@ that answers yes to everything; a line that passes there would pass on a broken 
   the index. Web UI at `/drive/`, JSON at `/api/drive/`.
 - `akramium-home/`: the binary that mounts the enabled modules.
 
+## Install on a NAS or a Linux box
+
+**Docker** (from the repository root). The image holds one static binary and nothing else,
+runs as user 1000, and reports its own health:
+
+```
+docker compose -f deploy/nas/docker-compose.yml up -d --build
+docker compose -f deploy/nas/docker-compose.yml logs     # the first start prints the setup link
+```
+
+Data lives in `deploy/nas/data`; make it writable by user 1000, or change `user:` in the
+compose file. Host networking (Linux) lets the daemon announce `http://akramium.local:11720`.
+
+**Without Docker**: download `akramium-home-<version>-linux-x86_64.tar.gz` (or `aarch64`
+for ARM boxes) from the releases, check it against `SHA256SUMS`, and follow the five lines at
+the top of `akramium-home.service`. The binary is static: it needs no libraries.
+
 ## On the network
 
 Set `listen = "0.0.0.0:11720"` and the daemon announces itself: `http://akramium.local:11720`

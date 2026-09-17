@@ -1,0 +1,7 @@
+# The container's configuration. Mount your own over /etc/akramium-home/home.toml to change it.
+listen = "0.0.0.0:11720"
+data_dir = "/var/lib/akramium-home"
+host_names = ["akramium.local"]
+
+[modules]
+dekave = true

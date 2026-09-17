@@ -8,8 +8,24 @@ use std::path::PathBuf;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn usage() -> ! {
-    eprintln!("usage: akramium-home [--config home.toml] [--data-dir DIR] [--listen ADDR] [--version]");
+    eprintln!("usage: akramium-home [--config home.toml] [--data-dir DIR] [--listen ADDR] [--health] [--version]");
     std::process::exit(2)
+}
+
+/// For a container's health check, where there is no curl: is a daemon answering on the
+/// configured port with its sign-in page?
+fn healthy(listen: std::net::SocketAddr) -> bool {
+    use std::io::{Read, Write};
+    let target = if listen.ip().is_unspecified() { std::net::SocketAddr::from(([127, 0, 0, 1], listen.port())) } else { listen };
+    let timeout = std::time::Duration::from_secs(3);
+    let Ok(mut stream) = std::net::TcpStream::connect_timeout(&target, timeout) else { return false };
+    let _ = stream.set_read_timeout(Some(timeout));
+    if stream.write_all(b"GET /login HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n").is_err() {
+        return false;
+    }
+    let mut head = [0u8; 64];
+    let n = stream.read(&mut head).unwrap_or(0);
+    head[..n].starts_with(b"HTTP/1.1 200")
 }
 
 /// Ctrl-C, or the SIGTERM that init systems and containers send. Stopping on it (instead of
@@ -37,11 +53,13 @@ async fn main() {
     let mut config_path: Option<PathBuf> = None;
     let mut data_dir: Option<PathBuf> = None;
     let mut listen: Option<String> = None;
+    let mut health = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--config" => config_path = Some(args.next().map(PathBuf::from).unwrap_or_else(|| usage())),
             "--data-dir" => data_dir = Some(args.next().map(PathBuf::from).unwrap_or_else(|| usage())),
             "--listen" => listen = Some(args.next().unwrap_or_else(|| usage())),
+            "--health" => health = true,
             "--version" | "-V" => {
                 println!("Akramium Home {VERSION}");
                 return;
@@ -50,7 +68,9 @@ async fn main() {
         }
     }
 
-    home_core::log::init();
+    if !health {
+        home_core::log::init();
+    }
     let mut config = match Config::load(config_path.as_deref()) {
         Ok(c) => c,
         Err(e) => {
@@ -66,6 +86,10 @@ async fn main() {
             eprintln!("--listen: {e}");
             std::process::exit(1)
         });
+    }
+
+    if health {
+        std::process::exit(if healthy(config.listen) { 0 } else { 1 });
     }
 
     let app = match build(config).await {
